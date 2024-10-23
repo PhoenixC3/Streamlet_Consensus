@@ -1,0 +1,36 @@
+package Data_Structures;
+public class Transaction {
+
+    private int sender;          // Sender (integer): the sender of the transaction.
+    private int receiver;        // Receiver (integer): the receiver of the transaction.
+    private int id;              // Transaction id (integer): a nonce that together with the sender should form a unique id for the tx.
+    private double ammount;      // Amount (double): the amount to be transferred.
+
+
+    public Transaction(int sender, int receiver, int id, double ammount){
+        this.sender = sender;
+        this.receiver = receiver;
+        this.id = id;
+        this.ammount = ammount;
+    }
+
+    public int getSender(){
+        return sender;
+    }
+
+    public int getReceiver(){
+        return receiver;
+    }
+
+    public int getId(){
+        return id;
+    }
+
+    public double getAmmount(){
+        return ammount;
+    }
+
+    public String toString(){
+        return "Transaction: sender: " + sender + ", receiver: " + receiver + ", id: " + id + ", ammount: " + ammount;
+    }
+}

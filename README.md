@@ -13,8 +13,7 @@ O Protocolo corre em épocas, onde são propostos blocos e são votados posterio
 
 # Tarefas ( Por Fazer )
 
-- Criar as classes mencionadas no enunciado
-- Criar uma classe StreamletProtocol que vai ser a "main" classe
+- Criar código da classe StreamletProtocol que vai ser a "main" classe
 - Criar ficheiros secundarios com o codigo de conexão/funções úteis
 
 - Conseguir Ligar 2 e posteriormente 3 replicas entre si e trocarem pelo menos 3 mensagens
@@ -25,3 +24,6 @@ O Protocolo corre em épocas, onde são propostos blocos e são votados posterio
 - (por definir)
 
 # Tarefas ( Concluído )
+
+- Criar as classes mencionadas no enunciado
+- Criar uma classe StreamletProtocol que vai ser a "main" classe

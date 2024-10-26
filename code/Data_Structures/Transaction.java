@@ -14,6 +14,9 @@ public class Transaction {
         this.ammount = ammount;
     }
 
+    public Transaction(){
+    }
+
     public int getSender(){
         return sender;
     }

@@ -10,6 +10,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.io.*;
 import Data_Structures.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Node {
     private final ScheduledExecutorService scheduler;
@@ -19,15 +21,21 @@ public class Node {
     private HashMap<Integer, ObjectOutputStream> outputStreams;
     private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
 
-    private int epoch = 1;
+    // * Volatile -> variavel que pode ser alterada por varios threads
+    private volatile int epoch = 0;
     private int epochDuration = 4; // segundos
-    private int currentLeader;
+    private volatile int currentLeader;
 
-    private List<Block> blockChain = new LinkedList<Block>();
-    private Queue<Block> notarizedBlocks = new LinkedList<Block>();
+    private volatile List<Block> blockChain = new LinkedList<Block>();
+
+    // CONTÉM APENAS BLOCOS NOTARIZADOS SEGUIDOS
+    private volatile Queue<Block> notarizedBlocks = new LinkedList<Block>();
+
+    // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
+    private Lock lock = new ReentrantLock();
 
     // Lista de Blocos e Quem já o enviou
-    private Map<Block, List<Integer>> msgReceivedBy = new HashMap<>();
+    private volatile Map<Block, List<Integer>> msgReceivedBy = new HashMap<>();
 
     public Node(int port) {
         this.port = port;
@@ -42,6 +50,13 @@ public class Node {
         Transaction[] gen = {};
         Block genBlock = new Block (new byte[0],0,0,gen);
 
+        lock.lock();
+        try {
+            blockChain.add(genBlock);
+        } finally {
+            lock.unlock();
+        }
+
         try {
             startServer();
             Thread.sleep(15 * 1000);
@@ -52,6 +67,7 @@ public class Node {
                 }
             }
 
+            // Começar protocolo
             startClock();
 
         } catch (Exception e) {
@@ -59,19 +75,11 @@ public class Node {
         }
     }
 
+    // Inicia o relogio para começar o protocolo de x em x segundos
     private void startClock() {
         scheduler.scheduleAtFixedRate(() -> {
             startStreamlet();
         }, 0, epochDuration, TimeUnit.SECONDS);
-    }
-
-    private void checkForFinalization() {
-        if (notarizedBlocks.size() >= 3) {
-            for (int i = 0; i < 2; i++) {
-                blockChain.add(notarizedBlocks.poll());
-            }
-            System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
-        }
     }
 
     //Cria server socket e fica a espera de conexoes
@@ -109,39 +117,81 @@ public class Node {
         }
     }
 
+    // Inicia uma nova epoca
     private void startStreamlet() {
-        currentLeader = knownPorts[epoch % knownPorts.length];
+        lock.lock();
+        try {
+            epoch++;
+        } finally {
+            lock.unlock();
+        }
+
+        currentLeader = Utils.getLeader(epoch, knownPorts);
         System.out.println("Epoch " + epoch + " started. Current leader: " + currentLeader);
         
+        // Se for o lider, propõe um bloco
         if (port == currentLeader) {
             proposeBlock();
         }
 
+        // ? Ele deve verificar se tem blocos notarizados quando recebe mensagens e não a cada epoca ???
         checkForFinalization();
-        epoch++;
     }
 
+    // Propor um Bloco
     private void proposeBlock() {
         Block newBlock = new Block(getLastBlockHash(), epoch, blockChain.size() + 1, Utils.generateTransactions());
         broadcast(new Message(Type.Propose, newBlock, port));
         System.out.println("Proposed block at epoch " + epoch);
     }
 
-    //Envia a mensagem para o peer da rede local com peerPort
-    private void sendMessage(Socket socket, int peerPort, Message message) throws IOException {
-        ObjectOutputStream oos = outputStreams.get(peerPort);
+    // Filtra os blocos notarizados para manter apenas sequências contínuas de épocas e adiciona o novo bloco se for a sequência correta
+    private void filterNotarizedBlocks(Block newBlock) {
+        if (notarizedBlocks.isEmpty()) {
+            lock.lock();
+            try{
+                notarizedBlocks.add(newBlock); // Se estiver vazio, adiciona o novo bloco
+            }finally {
+               lock.unlock();
+            }
+            return;
+        }
 
-        try {
-            oos.writeObject(message);
-            oos.flush();
-        } catch (Exception e) {
-            e.printStackTrace();
+        // Obtém a época do último bloco no notarizedBlocks
+        int lastEpochInNotarized = ((LinkedList<Block>) notarizedBlocks).getLast().getEpoch();
+
+        lock.lock();
+        try{
+            // Verifica se o novo bloco é a sequência correta
+            if (newBlock.getEpoch() == lastEpochInNotarized + 1) {
+                notarizedBlocks.add(newBlock); // Adiciona o novo bloco à lista
+            } else {
+                // Se não for sequência correta, limpa a lista e adiciona apenas o novo bloco
+                notarizedBlocks.clear();
+                notarizedBlocks.add(newBlock);
+            }
+        }finally {
+            lock.unlock();
         }
     }
 
-    private byte[] getLastBlockHash() {
-        if (blockChain.isEmpty()) return new byte[0];
-        return blockChain.get(blockChain.size() - 1).getHash();
+    // Verifica se já tem 3 blocos notarizados e adiciona ao blockchain
+    // Controlo de limpar a queue é feito ao notorizar um bloco
+    private void checkForFinalization() {
+        if (notarizedBlocks.size() >= 3) {
+
+            // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
+            lock.lock();
+            try {
+                for (int i = 0; i < 2; i++) {
+                    blockChain.add(notarizedBlocks.poll());
+                }
+            }
+            finally {
+                lock.unlock();
+            }
+            System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
+        }
     }
 
     //Da broadcast para todos os peers a quem ja esta conectado
@@ -157,7 +207,26 @@ public class Node {
         }
     }
 
-    //Handle das mensagens com cada peer
+    //Envia a mensagem para o peer da rede local com peerPort
+    private void sendMessage(Socket socket, int peerPort, Message message) throws IOException {
+        ObjectOutputStream oos = outputStreams.get(peerPort);
+
+        try {
+            oos.writeObject(message);
+            oos.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private byte[] getLastBlockHash() {
+        if (blockChain.isEmpty()) return new byte[0];
+        return blockChain.get(blockChain.size() - 1).getHash();
+    }
+
+    // Handle das mensagens com cada peer
+    // ! Ainda não está a fazer nada, precisamos de dar handle às mensagens TODAS
     private class ClientHandler implements Runnable {
         private Socket sock;
         private ObjectInputStream ois;
@@ -166,6 +235,7 @@ public class Node {
             this.sock = socket;
         }
 
+        // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
         @Override
         public void run() {
             try {

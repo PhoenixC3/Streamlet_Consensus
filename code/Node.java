@@ -254,7 +254,7 @@ public class Node {
 
 
 
-        // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
+        // ! FALTA DAR ECHO (tem de se dar echo de todas as mensagens recebidas)
         // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
         private void handlePropose(Message msg) {
             Block rcvdBlock;

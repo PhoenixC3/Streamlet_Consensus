@@ -9,7 +9,9 @@ O Protocolo corre em epocas, onde sao propostos blocos e sao votados posteriorme
 # Tarefas ( Por Fazer )
 
 - Handle de mensagens
+- Fazer com que a cada mensagem exista "echo"
 - Fazer com que o código execute todo ao mesmo tempo
+
 
 # Passo a passo
 Nodes geram ghost transactions -> Bloco(Transactions) -> Broadcast da Mensagem com o Bloco

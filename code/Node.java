@@ -178,12 +178,13 @@ public class Node {
     // Verifica se já tem 3 blocos notarizados e adiciona ao blockchain
     // Controlo de limpar a queue é feito ao notorizar um bloco
     private void checkForFinalization() {
-        if (notarizedBlocks.size() >= 3) {
-
+        if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
+            int temp = notarizedBlocks.size();
             // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
             lock.lock();
             try {
-                for (int i = 0; i < 2; i++) {
+                // Remove todos os blocos notarizados da queue e adiciona ao blockchain menos o último
+                for (int i = 0; i < temp - 1; i++) {
                     blockChain.add(notarizedBlocks.poll());
                 }
             }
@@ -192,6 +193,19 @@ public class Node {
             }
             System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
         }
+    }
+
+    // Verifica se os 3 últimos blocos notarizados são seguidos
+    private boolean checkLastBlocks() {
+        if (notarizedBlocks.size() < 3) {
+            return false;
+        }
+        // Verifica se os 3 últimos blocos notarizados são seguidos
+        Block[] blocks = notarizedBlocks.toArray(new Block[0]);
+        int lastIndex = blocks.length - 1;
+        
+        return blocks[lastIndex].getEpoch() == blocks[lastIndex - 1].getEpoch() + 1 &&
+           blocks[lastIndex - 1].getEpoch() == blocks[lastIndex - 2].getEpoch() + 1;
     }
 
     //Da broadcast para todos os peers a quem ja esta conectado
@@ -203,7 +217,7 @@ public class Node {
                 sendMessage(connectedPeers.get(peerPort), peerPort, msg);
             } catch (IOException e) {
                 System.out.println("------------------------------");
-                System.out.println("Client 127.0.0.1:" + peerPort + " disconnected");
+                System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
                 System.out.println("------------------------------");
                 disconnectedPeers.add(peerPort);
             }
@@ -250,23 +264,39 @@ public class Node {
                     Message msg = (Message) ois.readObject();
                     System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
 
-                    // switch (msg.getType()) {
-                    //     case Propose:
-                    //         handlePropose(msg);
-                    //         break;
-                    //     case Vote:
-                    //         handleVote(msg);
-                    //         break;
-                    //     case Echo:
-                    //         handleEcho(msg);
-                    //         break;
-                    //     default:
-                    //         break;
-                    // }
+                    switch (msg.getType()) {
+                        case Propose:
+                            // handlePropose(msg);
+                            break;
+                        case Vote:
+                            // handleVote(msg);
+                            break;
+                        case Echo:
+                            // handleEcho(msg);
+                            break;
+                        default:
+                            break;
+                    }
                 }
             } catch (Exception e) {
                 System.out.println("Client disconnected");
             }
+        }
+
+
+
+        // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
+
+        private void handlePropose(Message msg) {
+
+        }
+
+        private void handleVote(Message msg) {
+
+        }
+
+        private void handleEcho(Message msg) {
+
         }
     }
 }

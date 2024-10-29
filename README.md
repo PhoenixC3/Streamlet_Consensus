@@ -17,13 +17,8 @@ O Protocolo corre em epocas, onde sao propostos blocos e sao votados posteriorme
 - Fazer com que o código execute todo ao mesmo tempo
 - Fazer com que o código funcione se um der crash
 
-# Tarefas ( Concluido )
+- Mudar o Finalize, podemos ter varios blocos notorizados de sequencias infinatas mas assim que vemos 3 seguidos, todos menos o ultimo são finalizados
 
-- Criar as classes mencionadas no enunciado
-- Criar uma classe StreamletProtocol que vai ser a "main" classe
-
-- Conseguir Ligar 2 e posteriormente 3 replicas entre si e trocarem pelo menos 3 mensagens
-- Conseguir Ligar 5 replicas entre si e trocarem pelo menos 3 mensagens
 
 # Passo a passo
 Nodes geram ghost transactions -> Bloco(Transactions) -> Broadcast da Mensagem com o Bloco

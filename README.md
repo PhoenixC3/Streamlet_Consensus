@@ -6,19 +6,10 @@
 Tem de se connectar entre si e trocar mensagens
 O Protocolo corre em epocas, onde sao propostos blocos e sao votados posteriormente
 
-- Setup:
-  Timer de 30 segundos para termos tempo de ligar todas as replicas e depois conecta-las entre si.
-  Cada replica vai ter um PORTO associado. Informacoes sobre os PORTOS vao estar num .TXT.
-  Cada replica vai ter de comunicar com todas as outras
-
 # Tarefas ( Por Fazer )
 
 - Handle de mensagens
 - Fazer com que o código execute todo ao mesmo tempo
-- Fazer com que o código funcione se um der crash
-
-- Mudar o Finalize, podemos ter varios blocos notorizados de sequencias infinatas mas assim que vemos 3 seguidos, todos menos o ultimo são finalizados
-
 
 # Passo a passo
 Nodes geram ghost transactions -> Bloco(Transactions) -> Broadcast da Mensagem com o Bloco

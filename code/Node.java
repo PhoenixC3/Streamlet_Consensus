@@ -201,7 +201,9 @@ public class Node {
             try {
                 sendMessage(connectedPeers.get(peerPort), peerPort, msg);
             } catch (IOException e) {
+                System.out.println("------------------------------");
                 System.out.println("Client 127.0.0.1:" + peerPort + " disconnected");
+                System.out.println("------------------------------");
                 connectedPeers.remove(peerPort);
             }
         }
@@ -211,12 +213,8 @@ public class Node {
     private void sendMessage(Socket socket, int peerPort, Message message) throws IOException {
         ObjectOutputStream oos = outputStreams.get(peerPort);
 
-        try {
-            oos.writeObject(message);
-            oos.flush();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        oos.writeObject(message);
+        oos.flush();
     }
 
 

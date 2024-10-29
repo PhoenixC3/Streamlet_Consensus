@@ -13,15 +13,9 @@ O Protocolo corre em epocas, onde sao propostos blocos e sao votados posteriorme
 
 # Tarefas ( Por Fazer )
 
-- Criar codigo da classe StreamletProtocol que vai ser a "main" classe
-- Criar ficheiros secundarios com o codigo de conexao/funcoes uteis
-- Comecar a implementar o protocolo em si com as epocas
-- While loop para trocar mensagens infinitamente
-
-- Definir estrutura para a blockchain
-- Definir Mapa de ReceivedMessages
-
-- Definir Época com quem é o Leader etc
+- Handle de mensagens
+- Fazer com que o código execute todo ao mesmo tempo
+- Fazer com que o código funcione se um der crash
 
 # Tarefas ( Concluido )
 

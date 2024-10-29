@@ -264,7 +264,7 @@ public class Node {
                 Block[] blocks = notarizedBlocks.toArray(new Block[0]);
                 if ( checkReceived(rcvdBlock, msg.getSender()) && (rcvdBlock.getLength() > blocks[blocks.length - 1].getLength() || epoch == 1) ) {
                     Message vote = new Message(Type.Vote, rcvdBlock, port);
-                    broadcast(msg);
+                    broadcast(vote);
                 }
             }
         }

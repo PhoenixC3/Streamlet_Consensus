@@ -145,36 +145,6 @@ public class Node {
         System.out.println("Proposed block at epoch " + epoch);
     }
 
-    // Filtra os blocos notarizados para manter apenas sequências contínuas de épocas e adiciona o novo bloco se for a sequência correta
-    private void filterNotarizedBlocks(Block newBlock) {
-        if (notarizedBlocks.isEmpty()) {
-            lock.lock();
-            try{
-                notarizedBlocks.add(newBlock); // Se estiver vazio, adiciona o novo bloco
-            }finally {
-               lock.unlock();
-            }
-            return;
-        }
-
-        // Obtém a época do último bloco no notarizedBlocks
-        int lastEpochInNotarized = ((LinkedList<Block>) notarizedBlocks).getLast().getEpoch();
-
-        lock.lock();
-        try{
-            // Verifica se o novo bloco é a sequência correta
-            if (newBlock.getEpoch() == lastEpochInNotarized + 1) {
-                notarizedBlocks.add(newBlock); // Adiciona o novo bloco à lista
-            } else {
-                // Se não for sequência correta, limpa a lista e adiciona apenas o novo bloco
-                notarizedBlocks.clear();
-                notarizedBlocks.add(newBlock);
-            }
-        }finally {
-            lock.unlock();
-        }
-    }
-
     // Verifica se já tem 3 blocos notarizados e adiciona ao blockchain
     // Controlo de limpar a queue é feito ao notorizar um bloco
     private void checkForFinalization() {
@@ -203,7 +173,7 @@ public class Node {
         // Verifica se os 3 últimos blocos notarizados são seguidos
         Block[] blocks = notarizedBlocks.toArray(new Block[0]);
         int lastIndex = blocks.length - 1;
-        
+
         return blocks[lastIndex].getEpoch() == blocks[lastIndex - 1].getEpoch() + 1 &&
            blocks[lastIndex - 1].getEpoch() == blocks[lastIndex - 2].getEpoch() + 1;
     }
@@ -288,6 +258,11 @@ public class Node {
         // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
 
         private void handlePropose(Message msg) {
+            Block rcvdBlock;
+            if( msg.getContent() instanceof Block ) {
+                rcvdBlock = (Block) msg.getContent();
+                filterNotarizedBlocks(newBlock);
+            }
 
         }
 

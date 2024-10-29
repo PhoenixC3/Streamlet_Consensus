@@ -37,4 +37,20 @@ public class Block implements Content, Serializable{
         String result = "Block: Epoch: " + epoch + ", length: " + length;
         return result;
     }
+
+    @Override
+    public boolean equals(Object obj){
+        if(obj == this){
+            return true;
+        }
+
+        if(obj == null || obj.getClass() != this.getClass()){
+            return false;
+        }
+
+        Block block = (Block) obj;
+        return this.epoch == block.epoch && this.length == block.length &&
+                (hash != null ? hash.equals(block.hash) : block.hash == null) &&
+                (transactions != null ? transactions.equals(block.transactions) : block.transactions == null);
+    }
 }

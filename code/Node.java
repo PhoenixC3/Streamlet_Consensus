@@ -145,7 +145,6 @@ public class Node {
         System.out.println("Proposed block at epoch " + epoch);
     }
 
-    // Verifica se já tem 3 blocos notarizados e adiciona ao blockchain
     // Controlo de limpar a queue é feito ao notorizar um bloco
     private void checkForFinalization() {
         if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
@@ -236,7 +235,7 @@ public class Node {
 
                     switch (msg.getType()) {
                         case Propose:
-                            // handlePropose(msg);
+                            handlePropose(msg);
                             break;
                         case Vote:
                             // handleVote(msg);
@@ -256,14 +255,47 @@ public class Node {
 
 
         // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
-
+        // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
         private void handlePropose(Message msg) {
             Block rcvdBlock;
             if( msg.getContent() instanceof Block ) {
                 rcvdBlock = (Block) msg.getContent();
-                filterNotarizedBlocks(newBlock);
-            }
 
+                Block[] blocks = notarizedBlocks.toArray(new Block[0]);
+                if ( checkReceived(rcvdBlock, msg.getSender()) && (rcvdBlock.getLength() > blocks[blocks.length - 1].getLength() || epoch == 1) ) {
+                    Message vote = new Message(Type.Vote, rcvdBlock, port);
+                    broadcast(msg);
+                }
+            }
+        }
+
+        // Verifica se a mensagem já foi recebida e adiciona caso não tenha sido
+        private boolean checkReceived(Block b, int sender) {
+            if (msgReceivedBy.containsKey(b)) {
+                List<Integer> senders = msgReceivedBy.get(b);
+                if (senders.contains(sender)) {
+                    return true;
+                } else {
+                    lock.lock();
+                    try{
+                        senders.add(sender);
+                    }
+                    finally {
+                        lock.unlock();
+                    }
+                    return false;
+                }
+            } else {
+                List<Integer> senders = new LinkedList<>();
+                senders.add(sender);
+                try{
+                    msgReceivedBy.put(b, senders);
+                }
+                finally {
+                    lock.unlock();
+                }
+                return false;
+            }
         }
 
         private void handleVote(Message msg) {

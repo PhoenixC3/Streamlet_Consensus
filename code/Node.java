@@ -19,7 +19,7 @@ public class Node {
     private int port;
     private HashMap<Integer, Socket> connectedPeers;
     private HashMap<Integer, ObjectOutputStream> outputStreams;
-    private final int[] knownPorts = {8001, 8002, 8003};
+    private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
@@ -197,6 +197,7 @@ public class Node {
     //Da broadcast para todos os peers a quem ja esta conectado
     // ! Temos de retirar dos connectedPeers quando algum dá crash
     private void broadcast(Message msg) {
+        List<Integer> disconnectedPeers = new LinkedList<>();
         for (int peerPort : connectedPeers.keySet()) {
             try {
                 sendMessage(connectedPeers.get(peerPort), peerPort, msg);
@@ -204,8 +205,14 @@ public class Node {
                 System.out.println("------------------------------");
                 System.out.println("Client 127.0.0.1:" + peerPort + " disconnected");
                 System.out.println("------------------------------");
-                connectedPeers.remove(peerPort);
+                disconnectedPeers.add(peerPort);
             }
+        }
+
+        // Só podemos remover depois de enviar a mensagem a todos para não dar erro
+        for (int peerPort : disconnectedPeers) {
+            connectedPeers.remove(peerPort);
+            outputStreams.remove(peerPort); 
         }
     }
 

@@ -19,7 +19,7 @@ public class Node {
     private int port;
     private HashMap<Integer, Socket> connectedPeers;
     private HashMap<Integer, ObjectOutputStream> outputStreams;
-    private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
+    private final int[] knownPorts = {8001, 8002, 8003};
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
@@ -238,13 +238,29 @@ public class Node {
         // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
         @Override
         public void run() {
+            // ficar a espera de mensagens
             try {
                 ois = new ObjectInputStream(sock.getInputStream());
-                Message message = (Message) ois.readObject();
+                while (true) {
+                    Message msg = (Message) ois.readObject();
+                    System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
 
-                System.out.println("Received: " + message.content.stringContent());
+                    // switch (msg.getType()) {
+                    //     case Propose:
+                    //         handlePropose(msg);
+                    //         break;
+                    //     case Vote:
+                    //         handleVote(msg);
+                    //         break;
+                    //     case Echo:
+                    //         handleEcho(msg);
+                    //         break;
+                    //     default:
+                    //         break;
+                    // }
+                }
             } catch (Exception e) {
-                e.printStackTrace();
+                System.out.println("Client disconnected");
             }
         }
     }

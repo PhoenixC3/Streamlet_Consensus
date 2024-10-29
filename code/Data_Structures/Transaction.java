@@ -1,5 +1,8 @@
 package Data_Structures;
-public class Transaction {
+
+import java.io.Serializable;
+
+public class Transaction implements Serializable{
 
     private int sender;          // Sender (integer): the sender of the transaction.
     private int receiver;        // Receiver (integer): the receiver of the transaction.

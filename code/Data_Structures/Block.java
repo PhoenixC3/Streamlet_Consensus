@@ -1,7 +1,9 @@
 package Data_Structures;
 
+import java.io.Serializable;
+
 // Note: All nodes of the system start with the genesis block, which has Length, Epoch and Hash equals 0.
-public class Block implements Content{
+public class Block implements Content, Serializable{
 
     private byte[] hash;                    // Hash (bytes): SHA1 hash of previous block.
     private int epoch;                      // Epoch (integer): the epoch number the block was generated.

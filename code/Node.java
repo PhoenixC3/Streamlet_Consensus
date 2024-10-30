@@ -1,5 +1,9 @@
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,7 +27,7 @@ public class Node {
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
-    private int epochDuration = 4; // segundos
+    private int epochDuration = 10; // segundos
     private volatile int currentLeader;
 
     private volatile List<Block> blockChain = new LinkedList<Block>();
@@ -49,7 +53,7 @@ public class Node {
     }
 
     // Inicia o Peer
-    public void startNode() {
+    public void startNode(String time) {
         connectedPeers = new HashMap<>();
         outputStreams = new HashMap<>();
 
@@ -71,6 +75,14 @@ public class Node {
                 if (port != this.port) {
                     connectToPeer(port);
                 }
+            }
+
+            DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+            LocalTime parsedTime = LocalTime.parse(time, timeFormatter);
+
+            LocalDateTime startTime = LocalDateTime.of(LocalDate.now(), parsedTime);
+
+            while (LocalDateTime.now().isBefore(startTime)) {
             }
 
             // Começar protocolo
@@ -247,8 +259,8 @@ public class Node {
                             break;
                         case Vote:
                             handleVote(msg);
-                            sendEcho(msg);
                             checkForFinalization();
+                            sendEcho(msg);
                             break;
                         case Echo:
                             handleEcho(msg);
@@ -318,46 +330,6 @@ public class Node {
             }
         }
 
-        // Verifica se a mensagem já foi enviada e adiciona caso não tenha sido
-        private boolean checkSent(Block b, int receiver) {
-            if (msgSentTo.containsKey(b)) {
-                List<Integer> receivers = msgSentTo.get(b);
-
-                if (receivers.contains(receiver)) {
-                    return true;
-                } 
-                else {
-                    lock.lock();
-
-                    try {
-                        receivers.add(receiver);
-                        msgSentTo.put(b, receivers);
-                    } catch(Exception e) {
-                        e.printStackTrace();
-                    }
-                    finally {
-                        lock.unlock();
-                    }
-
-                    return false;
-                }
-            } 
-            else {
-                lock.lock();
-                
-                try {
-                    List<Integer> receivers = new LinkedList<>();
-                    receivers.add(receiver);
-                    msgSentTo.put(b, receivers);
-                }
-                finally {
-                    lock.unlock();
-                }
-
-                return false;
-            }
-        }
-
         private void handleVote(Message msg) {
             Block votedBlock;
 
@@ -397,7 +369,7 @@ public class Node {
                 rcvdEcho = (Message) msg.getContent();
                 
                 //Da handle da mensagem que veio em echo
-                if (rcvdEcho.getType() == Type.Propose) {
+                if (rcvdEcho.getType().equals(Type.Propose)) {
                     handlePropose(rcvdEcho);
                 }
                 else {
@@ -426,6 +398,46 @@ public class Node {
                 Message send = new Message(Type.Echo, msg, port);
 
                 broadcastTo(send, sendTo);
+            }
+        }
+
+        // Verifica se a mensagem já foi enviada e adiciona caso não tenha sido
+        private boolean checkSent(Block b, int receiver) {
+            if (msgSentTo.containsKey(b)) {
+                List<Integer> receivers = msgSentTo.get(b);
+
+                if (receivers.contains(receiver)) {
+                    return true;
+                } 
+                else {
+                    lock.lock();
+
+                    try {
+                        receivers.add(receiver);
+                        msgSentTo.put(b, receivers);
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                    }
+                    finally {
+                        lock.unlock();
+                    }
+
+                    return false;
+                }
+            } 
+            else {
+                lock.lock();
+                
+                try {
+                    List<Integer> receivers = new LinkedList<>();
+                    receivers.add(receiver);
+                    msgSentTo.put(b, receivers);
+                }
+                finally {
+                    lock.unlock();
+                }
+
+                return false;
             }
         }
 

@@ -2,6 +2,7 @@
 
 # Dúvidas
 - Perguntar ao stor sobre HASH DO BLOCO ANTERIOR no Block.java
+- Quando alguém dá CRASH, REMOVEMOS? ELEGEMOS LIDER DE FORMA DIFERENTE?
 
 # Breve Descricao
 

@@ -1,5 +1,8 @@
 # TFD24-25
 
+# Dúvidas
+- Perguntar ao stor sobre HASH DO BLOCO ANTERIOR no Block.java
+
 # Breve Descricao
 
 5 replicas a correr em processos independentes

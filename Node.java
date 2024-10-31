@@ -17,8 +17,6 @@ import Data_Structures.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-
-// ! COMO FAZER O HASH DO BLOCO????
 public class Node {
     private final ScheduledExecutorService scheduler;
     private ServerSocket serverSocket;
@@ -42,6 +40,12 @@ public class Node {
 
     // Lista de Blocos e Quem já o enviou
     private volatile Map<Block, List<Integer>> msgReceivedBy = new HashMap<>();
+
+    // Lista de Blocos e a quem já o enviámos
+    private volatile Map<Block, List<Integer>> msgSentTo = new HashMap<>();
+
+    // Votos por bloco
+    private Map<Block, LinkedList<Integer>> blockVotes = new HashMap<>();
 
     public Node(int port) {
         this.port = port;
@@ -147,14 +151,11 @@ public class Node {
         if (port == currentLeader) {
             proposeBlock();
         }
-
-        // ? Ele deve verificar se tem blocos notarizados quando recebe mensagens e não a cada epoca ???
-        checkForFinalization();
     }
 
     // Propor um Bloco
     private void proposeBlock() {
-        Block newBlock = new Block(getLastBlockHash(), epoch, (blockChain.size() + notarizedBlocks.size() + 1), Utils.generateTransactions());
+        Block newBlock = new Block(getLastBlockHash(), epoch, blockChain.size() + 1, Utils.generateTransactions());
         broadcast(new Message(Type.Propose, newBlock, port));
         System.out.println("Proposed block at epoch " + epoch);
     }
@@ -163,8 +164,10 @@ public class Node {
     private void checkForFinalization() {
         if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
             int temp = notarizedBlocks.size();
+
             // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
             lock.lock();
+            
             try {
                 // Remove todos os blocos notarizados da queue e adiciona ao blockchain menos o último
                 for (int i = 0; i < temp - 1; i++) {
@@ -174,6 +177,7 @@ public class Node {
             finally {
                 lock.unlock();
             }
+
             System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
         }
     }
@@ -194,7 +198,8 @@ public class Node {
     //Da broadcast para todos os peers a quem ja esta conectado
     // ! Temos de retirar dos connectedPeers quando algum dá crash
     private void broadcast(Message msg) {
-        List<Integer> disconnectedPeers = new LinkedList<>();
+        List<Integer> disconnectedPeers = new LinkedList<Integer>();
+
         for (int peerPort : connectedPeers.keySet()) {
             try {
                 sendMessage(connectedPeers.get(peerPort), peerPort, msg);
@@ -202,6 +207,7 @@ public class Node {
                 System.out.println("------------------------------");
                 System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
                 System.out.println("------------------------------");
+
                 disconnectedPeers.add(peerPort);
             }
         }
@@ -228,7 +234,6 @@ public class Node {
     }
 
     // Handle das mensagens com cada peer
-    // ! Ainda não está a fazer nada, precisamos de dar handle às mensagens TODAS
     private class ClientHandler implements Runnable {
         private Socket sock;
         private ObjectInputStream ois;
@@ -237,162 +242,204 @@ public class Node {
             this.sock = socket;
         }
 
-        // ! FAZER HANDLE DE TODOS OS TIPOS DE MENSAGENS
         @Override
         public void run() {
-            // ficar a espera de mensagens
+            // Ficar a espera de mensagens
             try {
                 ois = new ObjectInputStream(sock.getInputStream());
                 while (true) {
                     Message msg = (Message) ois.readObject();
                     System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
-                    System.out.flush();
 
+                    //Ele faz echo de qualquer mensagem
                     switch (msg.getType()) {
                         case Propose:
                             handlePropose(msg);
+                            sendEcho(msg);
                             break;
                         case Vote:
                             handleVote(msg);
+                            checkForFinalization();
+                            sendEcho(msg);
                             break;
                         case Echo:
-                            // handleEcho(msg);
+                            handleEcho(msg);
                             break;
                         default:
                             break;
                     }
                 }
             } catch (Exception e) {
-                // ! Se for para não dar erro, descomentar a linha de baixo
-                // System.out.println("Client disconnected");
-                System.err.println(e);
+                System.out.println("Client disconnected");
+                e.printStackTrace();
             }
         }
 
-        // Veri ca se a mensagem já foi recebida e adiciona caso não tenha sido
-        // Returns true if the message was already received
-        private boolean checkReceived(Block b, int sender) {
-            if (msgReceivedBy.containsKey(b)) {
-                List<Integer> senders = msgReceivedBy.get(b);
-                if (senders.contains(sender)) {
-                    return true;
-                } else {
-                    lock.lock();
-                    try{
-                        senders.add(sender);
-                        msgReceivedBy.put(b,senders);
-                    }
-                    finally {
-                        lock.unlock();
-                    }
-                    return false;
-                }
-            } else {
-                List<Integer> senders = new LinkedList<>();
-                senders.add(sender);
-                lock.lock();
-                try{
-                    msgReceivedBy.put(b, senders);
-                }
-                finally {
-                    lock.unlock();
-                }
-                return false;
-            }
-        }
-
-        // ! FALTA DAR ECHO (tem de se dar echo de todas as mensagens recebidas)
         // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
         private void handlePropose(Message msg) {
             Block rcvdBlock;
+
             if( msg.getContent() instanceof Block ) {
                 rcvdBlock = (Block) msg.getContent();
-
                 Block[] blocks = notarizedBlocks.toArray(new Block[0]);
-                System.out.println("Received block at epoch " + rcvdBlock.getEpoch());
-                if ( !checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength()) ) {
-                    notarizeBlock(rcvdBlock);
-                    checkForFinalization();
+
+                if (!checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength())) {
                     Message vote = new Message(Type.Vote, rcvdBlock, port);
                     broadcast(vote);
                 }
             }
         }
 
+        // Verifica se a mensagem já foi recebida e adiciona caso não tenha sido
+        private boolean checkReceived(Block b, int sender) {
+            if (msgReceivedBy.containsKey(b)) {
+                List<Integer> senders = msgReceivedBy.get(b);
 
-        // * Dá handle dos votos e dá echo 
+                if (senders.contains(sender)) {
+                    return true;
+                } 
+                else {
+                    lock.lock();
+
+                    try {
+                        senders.add(sender);
+                        msgReceivedBy.put(b, senders);
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                    }
+                    finally {
+                        lock.unlock();
+                    }
+
+                    return false;
+                }
+            } 
+            else {
+                lock.lock();
+
+                try {
+                    List<Integer> senders = new LinkedList<>();
+                    senders.add(sender);
+                    msgReceivedBy.put(b, senders);
+                }
+                finally {
+                    lock.unlock();
+                }
+
+                return false;
+            }
+        }
+
         private void handleVote(Message msg) {
             Block votedBlock;
+
             if (msg.getContent() instanceof Block) {
                 votedBlock = (Block) msg.getContent();
 
-                Block[] blocks = notarizedBlocks.toArray(new Block[0]);
-                if ( !checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength()) ) {
-                    //Verificar quorum e notarizar
-                    if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
-                        notarizeBlock(votedBlock);
-                        checkForFinalization();
-                    }
-
+                //Registar o voto
+                if (blockVotes.get(votedBlock) == null) {
+                    LinkedList<Integer> voters = new LinkedList<Integer>();
+                    voters.add(msg.getSender());
+                    blockVotes.put(votedBlock, voters);
                 }
-
-                // ! FALTA FAZER 1 ECHO DEPOIS DE RECEBER O VOTO
-                // CRIAR LISTA DE VOTES // ECHOS e fazer echo de todos os votos 1 UNICA VEZ
-
+                else {
+                    LinkedList<Integer> voters = blockVotes.get(votedBlock);
+                    voters.add(msg.getSender());
+                    blockVotes.put(votedBlock, voters);
+                }
+    
+                //Verificar quorum e notarizar
+                if (blockVotes.get(votedBlock).size() > (knownPorts.length / 2)) {
+                    notarizeBlock(votedBlock);
+                }
             }
         }
 
         //A collection of at more than n/2 votes from distinct nodes for the same block is called a notarization for the block
         private void notarizeBlock(Block block) {
             if (!notarizedBlocks.contains(block) && !blockChain.contains(block)) {
-                lock.lock();
-                try {
-                    notarizedBlocks.add(block);
-                    System.out.println("Block notarized at epoch " + block.getEpoch());
-                } finally {
-                    lock.unlock();
-                }
+                notarizedBlocks.add(block);
             }
         }
 
-        // private void handleEcho(Message msg) {
-        //                 Message rcvdEcho;
+        private void handleEcho(Message msg) {
+            Message rcvdEcho;
 
-        //     if( msg.getContent() instanceof Message ) {
-        //         rcvdEcho = (Message) msg.getContent();
+            if( msg.getContent() instanceof Message ) {
+                rcvdEcho = (Message) msg.getContent();
                 
-        //         //Da handle da mensagem que veio em echo
-        //         if (rcvdEcho.getType().equals(Type.Propose)) {
-        //             handlePropose(rcvdEcho);
-        //         }
-        //         else {
-        //             handleVote(rcvdEcho);
-        //         }
+                //Da handle da mensagem que veio em echo
+                if (rcvdEcho.getType().equals(Type.Propose)) {
+                    handlePropose(rcvdEcho);
+                }
+                else {
+                    handleVote(rcvdEcho);
+                }
 
-        //         //Faz echo da mensagem que veio em echo
-        //         sendEcho(rcvdEcho);
-        //     }
-        // }
+                //Faz echo da mensagem que veio em echo
+                sendEcho(rcvdEcho);
+            }
+        }
 
-        // private void sendEcho(Message msg) {
-        //     Block rcvdBlock;
+        private void sendEcho(Message msg) {
+            Block rcvdBlock;
 
-        //     //Envia o echo para os a que ainda nao enviou
-        //     if( msg.getContent() instanceof Block ) {
-        //         rcvdBlock = (Block) msg.getContent();
-        //         LinkedList<Integer> sendTo = new LinkedList<Integer>();
+            //Envia o echo para os a que ainda nao enviou
+            if( msg.getContent() instanceof Block ) {
+                rcvdBlock = (Block) msg.getContent();
+                LinkedList<Integer> sendTo = new LinkedList<Integer>();
 
-        //         for (int port : connectedPeers.keySet()) {
-        //             if (!checkSent(rcvdBlock, port)) {
-        //                 sendTo.add(port);
-        //             }
-        //         }
+                for (int port : connectedPeers.keySet()) {
+                    if (!checkSent(rcvdBlock, port)) {
+                        sendTo.add(port);
+                    }
+                }
 
-        //         Message send = new Message(Type.Echo, msg, port);
+                Message send = new Message(Type.Echo, msg, port);
 
-        //         broadcastTo(send, sendTo);
-        //     }
-        // }
+                broadcastTo(send, sendTo);
+            }
+        }
+
+        // Verifica se a mensagem já foi enviada e adiciona caso não tenha sido
+        private boolean checkSent(Block b, int receiver) {
+            if (msgSentTo.containsKey(b)) {
+                List<Integer> receivers = msgSentTo.get(b);
+
+                if (receivers.contains(receiver)) {
+                    return true;
+                } 
+                else {
+                    lock.lock();
+
+                    try {
+                        receivers.add(receiver);
+                        msgSentTo.put(b, receivers);
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                    }
+                    finally {
+                        lock.unlock();
+                    }
+
+                    return false;
+                }
+            } 
+            else {
+                lock.lock();
+                
+                try {
+                    List<Integer> receivers = new LinkedList<>();
+                    receivers.add(receiver);
+                    msgSentTo.put(b, receivers);
+                }
+                finally {
+                    lock.unlock();
+                }
+
+                return false;
+            }
+        }
 
         private void broadcastTo(Message msg, LinkedList<Integer> sendTo) {
             List<Integer> disconnectedPeers = new LinkedList<Integer>();

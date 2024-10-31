@@ -1,6 +1,7 @@
 package Data_Structures;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 // Note: All nodes of the system start with the genesis block, which has Length, Epoch and Hash equals 0.
 public class Block implements Content, Serializable{
@@ -34,7 +35,7 @@ public class Block implements Content, Serializable{
     }
 
     public String stringContent(){
-        String result = "Block: Epoch: " + epoch + ", length: " + length;
+        String result = "Block: Epoch: " + epoch + ", length: " + length ;
         return result;
     }
 
@@ -50,7 +51,20 @@ public class Block implements Content, Serializable{
 
         Block block = (Block) obj;
         return this.epoch == block.epoch && this.length == block.length &&
-                (hash != null ? hash.equals(block.hash) : block.hash == null) &&
-                (transactions != null ? transactions.equals(block.transactions) : block.transactions == null);
+            Arrays.equals(this.hash, block.hash) &&
+            Arrays.equals(this.transactions, block.transactions); 
     }
+
+
+    @Override
+    public int hashCode(){
+        int result = 17;
+        result = 31 * result + epoch;
+        result = 31 * result + length;
+        result = 31 * result + Arrays.hashCode(hash);
+        result = 31 * result + Arrays.hashCode(transactions);
+        return result;
+   }
+
+
 }

@@ -54,4 +54,16 @@ public class Transaction implements Serializable{
         Transaction transaction = (Transaction) obj;
         return (this.sender == transaction.sender && this.receiver == transaction.receiver && this.id == transaction.id && this.ammount == transaction.ammount);
     }
+
+    @Override
+    public int hashCode() {
+        int result = 17;
+        result = 31 * result + sender;
+        result = 31 * result + receiver;
+        result = 31 * result + id;
+        long ammountBits = Double.doubleToLongBits(ammount);
+        result = 31 * result + (int)(ammountBits ^ (ammountBits >>> 32));
+        return result;
+    }
+
 }

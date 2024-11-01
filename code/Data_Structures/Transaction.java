@@ -2,7 +2,9 @@ package Data_Structures;
 
 import java.io.Serializable;
 
-public class Transaction implements Serializable{
+public class Transaction implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private int sender;          // Sender (integer): the sender of the transaction.
     private int receiver;        // Receiver (integer): the receiver of the transaction.

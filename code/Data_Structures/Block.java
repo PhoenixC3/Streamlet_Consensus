@@ -1,10 +1,12 @@
 package Data_Structures;
 
-import java.io.Serializable;
 import java.util.Arrays;
+import java.io.Serializable;
 
 // Note: All nodes of the system start with the genesis block, which has Length, Epoch and Hash equals 0.
-public class Block implements Content, Serializable{
+public class Block implements Content, Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private byte[] hash;                    // Hash (bytes): SHA1 hash of previous block.
     private int epoch;                      // Epoch (integer): the epoch number the block was generated.
@@ -39,22 +41,17 @@ public class Block implements Content, Serializable{
         return result;
     }
 
+    
     @Override
-    public boolean equals(Object obj){
-        if(obj == this){
-            return true;
-        }
+    public boolean equals(Object obj) {
+        if (obj == this) return true;
 
-        if(obj == null || obj.getClass() != this.getClass()){
-            return false;
-        }
+        if (obj == null || getClass() != obj.getClass()) return false;
 
         Block block = (Block) obj;
-        return this.epoch == block.epoch && this.length == block.length &&
-            Arrays.equals(this.hash, block.hash) &&
-            Arrays.equals(this.transactions, block.transactions); 
-    }
 
+        return epoch == block.epoch && length == block.length && Arrays.equals(hash, block.hash) && Arrays.deepEquals(transactions, block.transactions);
+    }
 
     @Override
     public int hashCode(){

@@ -1,7 +1,7 @@
 package Data_Structures;
 
 public enum Type {
-    Propose, Vote, Echo
+    Propose, Vote, Echo;
 }
 
 // Propose: to be used for proposing blocks. The Content is a Block.

@@ -198,22 +198,30 @@ public class Node {
     //Da broadcast para todos os peers a quem ja esta conectado
     // ! Temos de retirar dos connectedPeers quando algum dá crash
     private void broadcast(Message msg) {
-        List<Integer> disconnectedPeers = new LinkedList<>();
-        for (int peerPort : connectedPeers.keySet()) {
-            try {
-                sendMessage(connectedPeers.get(peerPort), peerPort, msg);
-            } catch (IOException e) {
-                System.out.println("------------------------------");
-                System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                System.out.println("------------------------------");
-                disconnectedPeers.add(peerPort);
-            }
-        }
+        lock.lock();
 
-        // Só podemos remover depois de enviar a mensagem a todos para não dar erro
-        for (int peerPort : disconnectedPeers) {
-            connectedPeers.remove(peerPort);
-            outputStreams.remove(peerPort); 
+        try {
+            List<Integer> disconnectedPeers = new LinkedList<>();
+            for (int peerPort : connectedPeers.keySet()) {
+                try {
+                    sendMessage(connectedPeers.get(peerPort), peerPort, msg);
+                } catch (IOException e) {
+                    System.out.println("------------------------------");
+                    System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
+                    System.out.println("------------------------------");
+                    disconnectedPeers.add(peerPort);
+                }
+            }
+    
+            // Só podemos remover depois de enviar a mensagem a todos para não dar erro
+            for (int peerPort : disconnectedPeers) {
+                connectedPeers.remove(peerPort);
+                outputStreams.remove(peerPort); 
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -223,6 +231,7 @@ public class Node {
 
         oos.writeObject(message);
         oos.flush();
+        oos.reset();
     }
 
 
@@ -267,8 +276,7 @@ public class Node {
                 }
             } catch (Exception e) {
                 // ! Se for para não dar erro, descomentar a linha de baixo
-                // System.out.println("Client disconnected");
-                e.printStackTrace();
+                System.out.println("Client disconnected");
             }
         }
 
@@ -310,7 +318,6 @@ public class Node {
             }
         }
 
-        // ! FALTA DAR ECHO (tem de se dar echo de todas as mensagens recebidas)
         // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
         private void handlePropose(Message msg) {
             Block rcvdBlock;
@@ -441,24 +448,32 @@ public class Node {
         }
 
         private void broadcastTo(Message msg, LinkedList<Integer> sendTo) {
-            List<Integer> disconnectedPeers = new LinkedList<Integer>();
+            lock.lock();
 
-            for (int peerPort : sendTo) {
-                try {
-                    sendMessage(connectedPeers.get(peerPort), peerPort, msg);
-                } catch (IOException e) {
-                    System.out.println("------------------------------");
-                    System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                    System.out.println("------------------------------");
-
-                    disconnectedPeers.add(peerPort);
-                }
-            }
+            try {
+                List<Integer> disconnectedPeers = new LinkedList<Integer>();
     
-            // Só podemos remover depois de enviar a mensagem a todos para não dar erro
-            for (int peerPort : disconnectedPeers) {
-                connectedPeers.remove(peerPort);
-                outputStreams.remove(peerPort); 
+                for (int peerPort : sendTo) {
+                    try {
+                        sendMessage(connectedPeers.get(peerPort), peerPort, msg);
+                    } catch (IOException e) {
+                        System.out.println("------------------------------");
+                        System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
+                        System.out.println("------------------------------");
+    
+                        disconnectedPeers.add(peerPort);
+                    }
+                }
+        
+                // Só podemos remover depois de enviar a mensagem a todos para não dar erro
+                for (int peerPort : disconnectedPeers) {
+                    connectedPeers.remove(peerPort);
+                    outputStreams.remove(peerPort); 
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
             }
         }
     }

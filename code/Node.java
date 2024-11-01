@@ -328,7 +328,7 @@ public class Node {
 
                 System.out.println("Received block at epoch " + rcvdBlock.getEpoch());
 
-                if ( !checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength()) ) {
+                if (!checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength()) && msg.getSender() != port) {
                     notarizeBlock(rcvdBlock);
                     checkForFinalization();
 
@@ -350,7 +350,7 @@ public class Node {
                 votedBlock = (Block) msg.getContent();
                 Block[] blocks = notarizedBlocks.toArray(new Block[0]);
 
-                if ( !checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength()) ) {
+                if (!checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength())) {
                     //Verificar quorum e notarizar
                     if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
                         notarizeBlock(votedBlock);

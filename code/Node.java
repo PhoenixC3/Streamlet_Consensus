@@ -158,7 +158,25 @@ public class Node {
 
     // Propor um Bloco
     private void proposeBlock() {
-        Block newBlock = new Block(getLastBlockHash(), epoch, (blockChain.size() + notarizedBlocks.size() + 1), Utils.generateTransactions());
+        byte[] previousHash;
+
+        // Definir o hash do bloco anterior com base na época
+        if (epoch != 1) {
+            // Obter o hash do último bloco notariado
+            if (!notarizedBlocks.isEmpty()) {
+                previousHash = notarizedBlocks.peek().calculateHash(); // Usa o hash do último bloco notariado
+            } else {
+                previousHash = getLastBlockHash(); // Caso não haja bloco notariado, usa o último hash da blockchain
+            }
+        } else {
+            // Usar o hash do bloco gênese para a primeira época
+            previousHash = blockChain.get(0).calculateHash();
+        }
+
+        // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain e nos blocos notariados
+        Block newBlock = new Block(previousHash, epoch, (blockChain.size() + notarizedBlocks.size() + 1), Utils.generateTransactions());
+
+        // Broadcast do novo bloco como uma mensagem de proposta
         broadcast(new Message(Type.Propose, newBlock, port));
         System.out.println("Proposed block at epoch " + epoch);
     }

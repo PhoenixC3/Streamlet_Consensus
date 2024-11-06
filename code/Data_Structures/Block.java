@@ -1,7 +1,8 @@
 package Data_Structures;
-
-import java.util.Arrays;
 import java.io.Serializable;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 // Note: All nodes of the system start with the genesis block, which has Length, Epoch and Hash equals 0.
 public class Block implements Content, Serializable {
@@ -13,8 +14,8 @@ public class Block implements Content, Serializable {
     private int length;                     // Length (integer): the number of the block in the proposer blockchain.
     private Transaction[] transactions;     // Transactions (array of Transactions): the list of transactions on the block.
 
-    public Block(byte[] hash, int epoch, int length, Transaction[] transactions){
-        this.hash = hash;
+    public Block(byte[] previousHash, int epoch, int length, Transaction[] transactions){
+        this.hash = previousHash;
         this.epoch = epoch;
         this.length = length;
         this.transactions = transactions;
@@ -62,6 +63,22 @@ public class Block implements Content, Serializable {
         result = 31 * result + Arrays.hashCode(transactions);
         return result;
    }
+    // Método para calcular o hash do bloco
+    public byte[] calculateHash(){
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(hash);  // Inclui o hash do bloco anterior
+            digest.update(Integer.toString(epoch).getBytes());
+            digest.update(Integer.toString(length).getBytes());
 
+            for (Transaction tx : transactions) {
+                digest.update(tx.toString().getBytes());  // Converte as transações para bytes
+            }
 
+            return digest.digest();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return new byte[0];
+        }
+    }
 }

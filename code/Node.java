@@ -18,7 +18,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 
-// ! COMO FAZER O HASH DO BLOCO????
 public class Node {
     private final ScheduledExecutorService scheduler;
     private ServerSocket serverSocket;
@@ -29,7 +28,7 @@ public class Node {
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
-    private int epochDuration = 10; // segundos
+    private int epochDuration = 8; // segundos
     private volatile int currentLeader;
 
     private volatile List<Block> blockChain = new LinkedList<Block>();
@@ -68,7 +67,7 @@ public class Node {
 
         try {
             startServer();
-            Thread.sleep(5 * 1000);
+            Thread.sleep(10 * 1000);
 
             for (int port : knownPorts) {
                 if (port != this.port) {
@@ -370,7 +369,7 @@ public class Node {
 
                 if (!checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength())) {
                     //Verificar quorum e notarizar
-                    if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
+                    if (msgReceivedBy.get(votedBlock).size() >= (knownPorts.length / 2)) {
                         notarizeBlock(votedBlock);
                         checkForFinalization();
                     }

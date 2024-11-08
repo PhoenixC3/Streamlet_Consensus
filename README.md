@@ -1,37 +1,43 @@
 # TFD24-25
 
-# Dúvidas
-- Perguntar ao stor sobre HASH DO BLOCO ANTERIOR no Block.java
-- Quando alguém dá CRASH, REMOVEMOS? ELEGEMOS LIDER DE FORMA DIFERENTE?
+# Projeto Fase 1  Grupo 10  
 
-# Breve Descricao
-
-5 replicas a correr em processos independentes
-Tem de se connectar entre si e trocar mensagens
-O Protocolo corre em epocas, onde sao propostos blocos e sao votados posteriormente
-
-# Tarefas ( Por Fazer )
-
-- Handle de mensagens
-- Fazer com que a cada mensagem exista "echo"
-- Fazer com que o código execute todo ao mesmo tempo
+Daniel Gonzalez 58961; Manuel Campos 58166; Tiago Almeida 58161
 
 
-# Passo a passo
-Nodes geram ghost transactions -> Bloco(Transactions) -> Broadcast da Mensagem com o Bloco
+# Como funciona o código?
 
-Ronda -> 4 segundos
+O Projeto é composto por 2 ficheiros base, o "start_time.txt" e o "StreamletProtocol.java".
+O .txt contém o tempo em que é suposto os processos começarem a executar o protocolo e o .java é o protocolo em si.
 
-Notorização: Bloco recebe pelo menos (n/2) + 1 VOTES. 
+Nesta 1ª fase temos o número de RÉPLICAS = 5 (estão presentes no código) assim como temos uma época = 8 segundos (também embutido no código).
+Por isso, caso seja necessário alterar tanto o número de réplicas como o tamanho da época basta alterar ou a variável:
 
-Eleição de Lider: Época mod Nº de nodes
+private int epochDuration = 8; // segundos  ---> Node.java
 
-Propor: Líder propoe Bloco para uma das chains maiores
+OU
 
-Vote: Node recebe bloco proposto, só vota se lenght > todas as outras chains
+private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005}; ---> Node.java
 
-ECHO A TODAS AS MENSAGENS
 
-Finalizar: Se 3 blocos com épocas seguidas forem vistos, finalizar os últimos dois blocos e o resto para trás
 
-Guardar quem nos enviou a mensagem
+# Como correr o código?
+
+Para correr o código basta:
+
+1) Abrir o ficheiro start_time.txt e alterar o tempo para pelo menos + 1 minuto do que o horario atual
+ Se são 21:10, escrever no ficheiro 21:11 ou 21:12 (pois dar run dos terminais pode fazer com que tempo passe e o relógio atualize para o próximo minuto)
+
+2) Abrir 5 terminais (após compilar o StreamletProcol.java) e escrever em cada um:
+(Nota: Existe um sleep de 10 segundos no código, para se ter tempo de correr os 5 terminais, se esses 10 segundos passarem e os 5 terminais não estiverem a correr, os processos vão se tentar conectar antes do outro EXISTIR!)
+
+"java StreamletProtocol <port>"   onde port é o número do porto que queremos atribuir dos mencionados acima {8001, 8002, 8003, 8004, 8005}
+
+Ou seja uma execução com as portas atuais mencionadas seria em terminais diferentes:
+java StreamletProtocol 8001
+java StreamletProtocol 8002
+java StreamletProtocol 8003
+java StreamletProtocol 8004
+java StreamletProtocol 8005
+
+

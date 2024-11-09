@@ -175,6 +175,17 @@ public class Node {
         // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain e nos blocos notariados
         Block newBlock = new Block(previousHash, epoch, (blockChain.size() + notarizedBlocks.size() + 1), Utils.generateTransactions());
 
+        // Antes de dar broadcast adicionar aos received
+        List<Integer> senders = new LinkedList<>();
+        lock.lock();
+        try{
+            senders.add(port);
+            msgReceivedBy.put(newBlock, senders);
+        }
+        finally {
+            lock.unlock();
+        }
+
         // Broadcast do novo bloco como uma mensagem de proposta
         broadcast(new Message(Type.Propose, newBlock, port));
         System.out.println("Proposed block at epoch " + epoch);
@@ -346,8 +357,10 @@ public class Node {
                 System.out.println("Received block at epoch " + rcvdBlock.getEpoch());
 
                 if (!checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength()) && msg.getSender() != port) {
-                    notarizeBlock(rcvdBlock);
-                    checkForFinalization();
+                    if (msgReceivedBy.get(rcvdBlock).size() > (knownPorts.length / 2)) {
+                        notarizeBlock(rcvdBlock);
+                        checkForFinalization();
+                    }
 
                     Message vote = new Message(Type.Vote, rcvdBlock, port);
 
@@ -369,7 +382,7 @@ public class Node {
 
                 if (!checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength())) {
                     //Verificar quorum e notarizar
-                    if (msgReceivedBy.get(votedBlock).size() >= (knownPorts.length / 2)) {
+                    if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
                         notarizeBlock(votedBlock);
                         checkForFinalization();
                     }
@@ -377,7 +390,6 @@ public class Node {
 
                 sendEcho(msg);
 
-                // CRIAR LISTA DE VOTES // ECHOS e fazer echo de todos os votos 1 UNICA VEZ
 
             }
         }

@@ -28,7 +28,7 @@ public class Node {
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
-    private int epochDuration = 8; // segundos
+    private int epochDuration = 10; // segundos
     private volatile int currentLeader;
 
     private volatile List<Block> blockChain = new LinkedList<Block>();
@@ -131,7 +131,6 @@ public class Node {
             System.out.println("Connected to 127.0.0.1:" + peerPort);
         } catch (Exception e) {
             System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
-            e.printStackTrace();
         }
     }
 
@@ -145,14 +144,16 @@ public class Node {
         }
 
         currentLeader = Utils.getLeader(epoch, knownPorts);
+
+        System.out.println();
         System.out.println("Epoch " + epoch + " started. Current leader: " + currentLeader);
+        System.out.println();
         
         // Se for o lider, propõe um bloco
         if (port == currentLeader) {
             proposeBlock();
         }
 
-        checkForFinalization();
     }
 
     // Propor um Bloco
@@ -188,25 +189,34 @@ public class Node {
 
         // Broadcast do novo bloco como uma mensagem de proposta
         broadcast(new Message(Type.Propose, newBlock, port));
+
+        System.out.println();
         System.out.println("Proposed block at epoch " + epoch);
+        System.out.println();
     }
 
     // Controlo de limpar a queue é feito ao notorizar um bloco
     private void checkForFinalization() {
-        if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
-            int temp = notarizedBlocks.size();
-            // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
-            lock.lock();
-            try {
+        // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
+        lock.lock();
+
+        try {
+            if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
+                int temp = notarizedBlocks.size();
+
                 // Remove todos os blocos notarizados da queue e adiciona ao blockchain menos o último
                 for (int i = 0; i < temp - 1; i++) {
                     blockChain.add(notarizedBlocks.poll());
                 }
+                
+                System.out.println();
+                System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
+                System.out.println();
             }
-            finally {
-                lock.unlock();
-            }
-            System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -255,12 +265,14 @@ public class Node {
 
     //Envia a mensagem para o peer da rede local com peerPort
     private void sendMessage(Socket socket, int peerPort, Message message) throws IOException {
-        ObjectOutputStream oos = outputStreams.get(peerPort);
-
+        ObjectOutputStream oos;
+        oos = outputStreams.get(peerPort);
+    
         oos.writeObject(message);
         oos.flush();
         oos.reset();
     }
+    
 
 
     private byte[] getLastBlockHash() {
@@ -304,7 +316,9 @@ public class Node {
                 }
             } catch (Exception e) {
                 // ! Se for para não dar erro, descomentar a linha de baixo
+                System.out.println("-----------------------");
                 System.out.println("Client disconnected");
+                System.out.println("-----------------------");
             }
         }
 
@@ -396,14 +410,20 @@ public class Node {
 
         //A collection of at more than n/2 votes from distinct nodes for the same block is called a notarization for the block
         private void notarizeBlock(Block block) {
-            if (!notarizedBlocks.contains(block) && !blockChain.contains(block)) {
-                lock.lock();
-                try {
+            lock.lock();
+
+            try {
+                if (!notarizedBlocks.contains(block) && !blockChain.contains(block)) {
                     notarizedBlocks.add(block);
+
+                    System.out.println();
                     System.out.println("Block notarized at epoch " + block.getEpoch());
-                } finally {
-                    lock.unlock();
+                    System.out.println();
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
             }
         }
 

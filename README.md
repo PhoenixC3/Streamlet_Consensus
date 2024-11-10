@@ -28,9 +28,10 @@ Para correr o código basta:
 1) Abrir o ficheiro start_time.txt e alterar o tempo para pelo menos + 1 minuto do que o horario atual
  Se são 21:10, escrever no ficheiro 21:11 ou 21:12 (pois dar run dos terminais pode fazer com que tempo passe e o relógio atualize para o próximo minuto)
 
-2) Abrir 5 terminais (após compilar o StreamletProcol.java) e escrever em cada um:
-(Nota: Existe um sleep de 10 segundos no código, para se ter tempo de correr os 5 terminais, se esses 10 segundos passarem e os 5 terminais não estiverem a correr, os processos vão se tentar conectar antes do outro EXISTIR!)
+2) Abrir 5 terminais e escrever em cada um:
+(Nota: Existe um sleep de 10 segundos no código, para se ter tempo de correr os 5 terminais. Se esses 10 segundos passarem e os 5 terminais não estiverem a correr, os processos vão se tentar conectar antes do outro estar online)
 
+"javac StreamletProtocol.java"    para compilar todas as classes (compilar apenas num dos terminais)
 "java StreamletProtocol <port>"   onde port é o número do porto que queremos atribuir dos mencionados acima {8001, 8002, 8003, 8004, 8005}
 
 Ou seja uma execução com as portas atuais mencionadas seria em terminais diferentes:

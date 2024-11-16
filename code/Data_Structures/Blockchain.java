@@ -59,20 +59,31 @@ public class Blockchain{
         return leaves;
     }
 
-    // get the longest chain
+    // get the longest finalized chain
     public LinkedList<Block> getLongestChain(){
         LinkedList<Block> longestChain = new LinkedList<Block>();
         int maxLength = 0;
         for(BlockchainNode node : leaves){
-            LinkedList<Block> chain = new LinkedList<Block>();
+            int length = 0;
             BlockchainNode current = node;
-            while(current != null){
-                chain.addFirst(current.getBlock());
+            BlockchainNode finalHead = null;
+            while(current != null ){
+                if (current.isFinalized()){
+                    length++;
+                    if (finalHead == null){
+                        finalHead = current;
+                    }
+                }
                 current = current.getPrevious();
             }
-            if(chain.size() > maxLength){
-                maxLength = chain.size();
-                longestChain = chain;
+            if(length > maxLength){
+                maxLength = length;
+                longestChain.clear();
+                current = finalHead;
+                while(current != null){
+                    longestChain.addFirst(current.getBlock());
+                    current = current.getPrevious();
+                }
             }
         }
         return longestChain;

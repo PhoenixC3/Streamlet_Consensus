@@ -1,5 +1,6 @@
 package Data_Structures;
 
+import java.util.Arrays;
 import java.util.LinkedList;
 
 // This class represents a blockchain
@@ -16,7 +17,14 @@ public class Blockchain{
     }
 
     // Add a block to the blockchain
+    // If the block is already in the blockchain, do nothing
     public void addBlock(Block block){
+
+        // check if the block is already in the 
+        if(contains(block)){
+            return;
+        }
+
         // If the blockchain is empty, create the first node
         if(leaves.isEmpty()){
             leaves.add(new BlockchainNode(block, null));
@@ -26,10 +34,16 @@ public class Blockchain{
             // and we finalize the previous blocks if necessary
             // If it doesn't, we add the block to the leaves list
             for(BlockchainNode node : leaves){
-                if(node.getBlock().getHash().equals(block.getHash())){
-                    leaves.remove(node);
+                if(Arrays.equals(node.getBlock().getHash(), block.getHash())){
                     BlockchainNode newNode = new BlockchainNode(block, node);
-                    finalizeBlocks(newNode);
+
+                    // If we finalize the blocks, we need to clean the leaves list
+                    // so we can converge to a single chain
+                    if (finalizeBlocks(newNode) ){
+                        leaves.clear();
+                    }else{
+                        leaves.remove(node);
+                    }
                     leaves.add(newNode);
                     return;
                 }
@@ -39,19 +53,41 @@ public class Blockchain{
 
     // Check if the blocks last 3 blocks are from sequential epochs
     // If they are, finalize previous blocks except the last one
-    public void finalizeBlocks(BlockchainNode n){
+    // Return true if the blocks were finalized
+    public boolean finalizeBlocks(BlockchainNode n){
+        Boolean finalized = false;
         BlockchainNode current = n;
 
         // Check if the last 3 blocks are from sequential epochs
-        if (current.getBlock().getEpoch() == current.getPrevious().getBlock().getEpoch() + 1 &&
-        current.getPrevious().getBlock().getEpoch() == current.getPrevious().getPrevious().getBlock().getEpoch() + 2){
+        if (current.getBlock().getLength() > 2 && current.getBlock().getEpoch() == current.getPrevious().getBlock().getEpoch() + 1 &&
+        current.getPrevious().getBlock().getEpoch() == current.getPrevious().getPrevious().getBlock().getEpoch() + 1){
+
             // Finalize the previous blocks
             current = current.getPrevious();
             while(current != null && !current.isFinalized()){
                 current.finalize();
                 current = current.getPrevious();
             }
+            finalized = true;
         }
+
+        return finalized;
+    }
+
+    // Check if the block is in the blockchain
+    public boolean contains(Block block){
+        // For each leaf, check if leaf.getBlock() == block and
+        // traverse the blockchain to check if the block is in the blockchain
+        for(BlockchainNode node : leaves){
+            BlockchainNode current = node;
+            while(current != null){
+                if(current.getBlock().equals(block)){
+                    return true;
+                }
+                current = current.getPrevious();
+            }
+        }
+        return false;
     }
 
     // Get the leaves of the blockchain

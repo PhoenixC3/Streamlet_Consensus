@@ -64,6 +64,7 @@ public class Blockchain{
 
             // Finalize the previous blocks
             current = current.getPrevious();
+            System.out.println("Blocks finalized until epoch: " + current.getBlock().getEpoch());
             while(current != null && !current.isFinalized()){
                 current.finalize();
                 current = current.getPrevious();

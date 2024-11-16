@@ -1,5 +1,7 @@
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Scanner;
 
 public class StreamletProtocol{
 
@@ -10,13 +12,36 @@ public class StreamletProtocol{
         Node replica = new Node(port);
 
         String time = null;
+
+        String epoch_time = null;
         
-        try {
-            time = Files.readString(Paths.get("start_time.txt")).trim();
-        } catch (Exception e) {
-            e.printStackTrace();
+        // config format
+        // Epoch Duration in seconds - 10
+        // Start Time - 17:38
+
+        // Read the epoch duration and start time from the config file
+        try{
+            File myObj = new File("config.txt");
+            Scanner myReader = new Scanner(myObj);
+            while (myReader.hasNextLine()) {
+                String data = myReader.nextLine();
+                
+                if (data.contains("Epoch Duration")){
+                    String[] parts = data.split("-");
+                    epoch_time = parts[parts.length - 1];
+                }
+                else if (data.contains("Start Time")){
+                    String[] parts = data.split("-");
+                    time = parts[parts.length - 1];
+                }
+            }
+            myReader.close();
+        }catch(Exception e){
+            System.out.println("Error reading config file");
         }
 
-        replica.startNode(time);
+        System.out.println("Epoch Duration chosen: " + epoch_time + " seconds");
+        System.out.println("Start Time chosen: " + time);
+        replica.startNode(time, epoch_time);
     }
 }   

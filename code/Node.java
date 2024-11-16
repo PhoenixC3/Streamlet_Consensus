@@ -28,7 +28,7 @@ public class Node {
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
-    private int epochDuration = 10; // segundos
+    private int epochDuration; // segundos
     private volatile int currentLeader;
 
     private volatile List<Block> blockChain = new LinkedList<Block>();
@@ -51,9 +51,11 @@ public class Node {
     }
 
     // Inicia o Peer
-    public void startNode(String time) {
+    public void startNode(String time,String epochTime) {
         connectedPeers = new HashMap<>();
         outputStreams = new HashMap<>();
+
+        epochDuration = Integer.parseInt(epochTime);
 
         Transaction[] gen = {};
         Block genBlock = new Block (new byte[0],0,0,gen);

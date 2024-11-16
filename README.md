@@ -6,8 +6,6 @@
 
 - Alterar o codigo para incluir nova estrutura de blockchains
 
-- Colocar o nome das portas e o tempo da época no ficheiro de configuração (start_time.txt)
-
 # Projeto Fase 1 Grupo 10
 
 Daniel Gonzalez 58961; Manuel Campos 58166; Tiago Almeida 58161

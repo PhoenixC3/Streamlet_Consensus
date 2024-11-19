@@ -34,7 +34,7 @@ public class Blockchain{
             // and we finalize the previous blocks if necessary
             // If it doesn't, we add the block to the leaves list
             for(BlockchainNode node : leaves){
-                if(Arrays.equals(node.getBlock().getHash(), block.getHash())){
+                if(Arrays.equals(node.getBlock().calculateHash(), block.getHash())){
                     BlockchainNode newNode = new BlockchainNode(block, node);
 
                     // If we finalize the blocks, we need to clean the leaves list
@@ -48,6 +48,16 @@ public class Blockchain{
                     return;
                 }
             }
+            // If the block is not in the blockchain, we add it to the leaves list 
+            // but we need to check whats the previous block
+            BlockchainNode previousNode = getPreviousNode(block);
+            if( previousNode == null){
+                System.out.println("####### Error: Block without reference to previous block #######");
+                return; 
+            }
+            BlockchainNode newNode = new BlockchainNode(block, previousNode);
+            leaves.add(newNode);
+
         }
     }
 
@@ -89,6 +99,21 @@ public class Blockchain{
             }
         }
         return false;
+    }
+
+    // search the blockchain to get the previous node of a block
+    public BlockchainNode getPreviousNode(Block block){
+        // check for each block if the hash from previous block is the same as some block in the blockchain
+        for(BlockchainNode node : leaves){
+            BlockchainNode current = node;
+            while(current != null){
+                if(Arrays.equals(current.getBlock().calculateHash(), block.getHash())){
+                    return current;
+                }
+                current = current.getPrevious();
+            }
+        }
+        return null;
     }
 
     // Get the leaves of the blockchain

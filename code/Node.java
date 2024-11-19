@@ -31,7 +31,7 @@ public class Node {
     private int epochDuration; // segundos
     private volatile int currentLeader;
 
-    private volatile List<Block> blockChain = new LinkedList<Block>();
+    private volatile Blockchain blockchain = new Blockchain();
 
     // CONTÉM APENAS BLOCOS NOTARIZADOS SEGUIDOS
     private volatile Queue<Block> notarizedBlocks = new LinkedList<Block>();
@@ -62,7 +62,7 @@ public class Node {
 
         lock.lock();
         try {
-            blockChain.add(genBlock);
+            blockchain.addBlock(genBlock);
         } finally {
             lock.unlock();
         }
@@ -145,8 +145,6 @@ public class Node {
             lock.unlock();
         }
 
-        currentLeader = Utils.getLeader(epoch, knownPorts);
-
         System.out.println();
         System.out.println("Epoch " + epoch + " started. Current leader: " + currentLeader);
         System.out.println();
@@ -161,22 +159,28 @@ public class Node {
     // Propor um Bloco
     private void proposeBlock() {
         byte[] previousHash;
+        int length;
+        Block newBlock;
 
-        // Definir o hash do bloco anterior com base na época
-        if (epoch != 1) {
-            // Obter o hash do último bloco notariado
-            if (!notarizedBlocks.isEmpty()) {
-                previousHash = notarizedBlocks.peek().calculateHash(); // Usa o hash do último bloco notariado
-            } else {
-                previousHash = getLastBlockHash(); // Caso não haja bloco notariado, usa o último hash da blockchain
+        // ! OVER HERE
+        // fazer uma seed para randomly todos os processos escolherem a mesma
+        lock.lock();
+        try{
+            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+            if(leaves.size() == 1){
+                previousHash = leaves.get(0).getBlock().calculateHash();
+                length = blockchain.getLength(leaves.get(0));
+            }else{
+                int index = Utils.randomFromFork(epoch, leaves.size());
+                previousHash = leaves.get(index).getBlock().calculateHash();
+                length = blockchain.getLength(leaves.get(index));
             }
-        } else {
-            // Usar o hash do bloco gênese para a primeira época
-            previousHash = blockChain.get(0).calculateHash();
-        }
 
-        // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain e nos blocos notariados
-        Block newBlock = new Block(previousHash, epoch, (blockChain.size() + notarizedBlocks.size() + 1), Utils.generateTransactions());
+            // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain
+            newBlock = new Block(previousHash, epoch, length, Utils.generateTransactions());
+        } finally {
+            lock.unlock();
+        }
 
         // Antes de dar broadcast adicionar aos received
         List<Integer> senders = new LinkedList<>();
@@ -195,44 +199,6 @@ public class Node {
         System.out.println();
         System.out.println("Proposed block at epoch " + epoch);
         System.out.println();
-    }
-
-    // Controlo de limpar a queue é feito ao notorizar um bloco
-    private void checkForFinalization() {
-        // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
-        lock.lock();
-
-        try {
-            if (notarizedBlocks.size() >= 3 && checkLastBlocks()) {
-                int temp = notarizedBlocks.size();
-
-                // Remove todos os blocos notarizados da queue e adiciona ao blockchain menos o último
-                for (int i = 0; i < temp - 1; i++) {
-                    blockChain.add(notarizedBlocks.poll());
-                }
-                
-                System.out.println();
-                System.out.println("Finalized blocks up to epoch " + blockChain.get(blockChain.size() - 1).getEpoch());
-                System.out.println();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // Verifica se os 3 últimos blocos notarizados são seguidos
-    private boolean checkLastBlocks() {
-        if (notarizedBlocks.size() < 3) {
-            return false;
-        }
-        // Verifica se os 3 últimos blocos notarizados são seguidos
-        Block[] blocks = notarizedBlocks.toArray(new Block[0]);
-        int lastIndex = blocks.length - 1;
-
-        return blocks[lastIndex].getEpoch() == blocks[lastIndex - 1].getEpoch() + 1 &&
-           blocks[lastIndex - 1].getEpoch() == blocks[lastIndex - 2].getEpoch() + 1;
     }
 
     //Da broadcast para todos os peers a quem ja esta conectado
@@ -274,13 +240,6 @@ public class Node {
         oos.flush();
         oos.reset();
     }
-    
-
-
-    private byte[] getLastBlockHash() {
-        if (blockChain.isEmpty()) return new byte[0];
-        return blockChain.get(blockChain.size() - 1).getHash();
-    }
 
     // Handle das mensagens com cada peer
     private class ClientHandler implements Runnable {
@@ -299,11 +258,12 @@ public class Node {
 
                 while (true) {
                     Message msg = (Message) ois.readObject();
-                    System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
+                    // System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
                     System.out.flush();
 
                     switch (msg.getType()) {
                         case Propose:
+                            System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
                             handlePropose(msg);
                             break;
                         case Vote:
@@ -367,15 +327,24 @@ public class Node {
             Block rcvdBlock;
 
             if( msg.getContent() instanceof Block ) {
+                boolean validLength = true;
                 rcvdBlock = (Block) msg.getContent();
-                Block[] blocks = notarizedBlocks.toArray(new Block[0]);
+
+                LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+
+                // verificar se a epoca do bloco recebido é >= blocos na blockchain
+                for (BlockchainNode node : leaves) {
+                    // ? Será que temos de mudar para ser APENAS MAIOR
+                    if (node.getBlock().getEpoch() > rcvdBlock.getEpoch()) {
+                        validLength = false;
+                    }
+                }
 
                 System.out.println("Received block at epoch " + rcvdBlock.getEpoch());
 
-                if (!checkReceived(rcvdBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 || rcvdBlock.getLength() > blocks[blocks.length - 1].getLength()) && msg.getSender() != port) {
+                if (!checkReceived(rcvdBlock, msg.getSender()) && validLength && msg.getSender() != port) {
                     if (msgReceivedBy.get(rcvdBlock).size() > (knownPorts.length / 2)) {
                         notarizeBlock(rcvdBlock);
-                        checkForFinalization();
                     }
 
                     Message vote = new Message(Type.Vote, rcvdBlock, port);
@@ -394,13 +363,22 @@ public class Node {
 
             if (msg.getContent() instanceof Block) {
                 votedBlock = (Block) msg.getContent();
-                Block[] blocks = notarizedBlocks.toArray(new Block[0]);
+                boolean validLength = true;
 
-                if (!checkReceived(votedBlock, msg.getSender()) && (epoch == 1 || blocks.length == 0 ||votedBlock.getLength() > blocks[blocks.length - 1].getLength())) {
+                LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+
+                // verificar se a epoca do bloco recebido é >= blocos na blockchain
+                for (BlockchainNode node : leaves) {
+                    // ? Será que temos de mudar para ser APENAS MAIOR
+                    if (node.getBlock().getEpoch() > votedBlock.getEpoch()) {
+                        validLength = false;
+                    }
+                }
+
+                if (!checkReceived(votedBlock, msg.getSender()) && validLength) {
                     //Verificar quorum e notarizar
                     if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
                         notarizeBlock(votedBlock);
-                        checkForFinalization();
                     }
                 }
 
@@ -415,9 +393,7 @@ public class Node {
             lock.lock();
 
             try {
-                if (!notarizedBlocks.contains(block) && !blockChain.contains(block)) {
-                    notarizedBlocks.add(block);
-
+                if(blockchain.addBlock(block)){
                     System.out.println();
                     System.out.println("Block notarized at epoch " + block.getEpoch());
                     System.out.println();

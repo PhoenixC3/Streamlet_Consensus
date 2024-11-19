@@ -18,16 +18,17 @@ public class Blockchain{
 
     // Add a block to the blockchain
     // If the block is already in the blockchain, do nothing
-    public void addBlock(Block block){
+    public boolean addBlock(Block block){
 
         // check if the block is already in the 
         if(contains(block)){
-            return;
+            return false;
         }
 
         // If the blockchain is empty, create the first node
         if(leaves.isEmpty()){
             leaves.add(new BlockchainNode(block, null));
+            return true;
         }else{
             // If !empty we need to check if the block has a reference to the previous block
             // If it does, we update the leaves list by removing the previous node and adding the new one
@@ -45,7 +46,7 @@ public class Blockchain{
                         leaves.remove(node);
                     }
                     leaves.add(newNode);
-                    return;
+                    return true;
                 }
             }
             // If the block is not in the blockchain, we add it to the leaves list 
@@ -53,10 +54,11 @@ public class Blockchain{
             BlockchainNode previousNode = getPreviousNode(block);
             if( previousNode == null){
                 System.out.println("####### Error: Block without reference to previous block #######");
-                return; 
+                return true; 
             }
             BlockchainNode newNode = new BlockchainNode(block, previousNode);
             leaves.add(newNode);
+            return true;
 
         }
     }
@@ -64,7 +66,7 @@ public class Blockchain{
     // Check if the blocks last 3 blocks are from sequential epochs
     // If they are, finalize previous blocks except the last one
     // Return true if the blocks were finalized
-    public boolean finalizeBlocks(BlockchainNode n){
+    private boolean finalizeBlocks(BlockchainNode n){
         Boolean finalized = false;
         BlockchainNode current = n;
 
@@ -74,9 +76,11 @@ public class Blockchain{
 
             // Finalize the previous blocks
             current = current.getPrevious();
-            System.out.println("Blocks finalized until epoch: " + current.getBlock().getEpoch());
+            System.out.println("#############");
+            System.out.println("Finalized blocks up to epoch: " + current.getBlock().getEpoch());
+            System.out.println("#############");
             while(current != null && !current.isFinalized()){
-                current.finalize();
+                current.finalizeBlock();
                 current = current.getPrevious();
             }
             finalized = true;
@@ -86,7 +90,7 @@ public class Blockchain{
     }
 
     // Check if the block is in the blockchain
-    public boolean contains(Block block){
+    private boolean contains(Block block){
         // For each leaf, check if leaf.getBlock() == block and
         // traverse the blockchain to check if the block is in the blockchain
         for(BlockchainNode node : leaves){
@@ -102,7 +106,7 @@ public class Blockchain{
     }
 
     // search the blockchain to get the previous node of a block
-    public BlockchainNode getPreviousNode(Block block){
+    private BlockchainNode getPreviousNode(Block block){
         // check for each block if the hash from previous block is the same as some block in the blockchain
         for(BlockchainNode node : leaves){
             BlockchainNode current = node;
@@ -149,5 +153,16 @@ public class Blockchain{
             }
         }
         return longestChain;
+    }
+
+    // will always return the length of the chain including the genesis block
+    public int getLength(BlockchainNode b){
+        int length = 0;
+        BlockchainNode current = b;
+        while(current != null){
+            length++;
+            current = current.getPrevious();
+        }
+        return length;
     }
 }

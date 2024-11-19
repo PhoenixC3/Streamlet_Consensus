@@ -42,6 +42,7 @@ public class StreamletProtocol{
 
         System.out.println("Epoch Duration chosen: " + epoch_time + " seconds");
         System.out.println("Start Time chosen: " + time);
+        System.out.println();
         replica.startNode(time, epoch_time);
     }
 }   

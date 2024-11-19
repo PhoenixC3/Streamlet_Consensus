@@ -32,7 +32,7 @@ public class BlockchainNode {
     }
 
     // finalize
-    public void finalize(){
+    public void finalizeBlock(){
         finalized = true;
     }
 

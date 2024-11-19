@@ -4,7 +4,9 @@
 
 - Fazer Garbage Collection
 
-- Alterar o codigo para incluir nova estrutura de blockchains
+- Testar forks
+
+- Fazer recovery
 
 # Projeto Fase 1 Grupo 10
 

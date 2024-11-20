@@ -26,15 +26,12 @@ public class Node {
     private HashMap<Integer, ObjectOutputStream> outputStreams;
     private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
 
-    // * Volatile -> variavel que pode ser alterada por varios threads
-    private volatile int epoch = 0;
+    private int epoch = 0;
     private int epochDuration; // segundos
-    private volatile int currentLeader;
-
+    private int currentLeader;
+    
+    // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile Blockchain blockchain = new Blockchain();
-
-    // CONTÉM APENAS BLOCOS NOTARIZADOS SEGUIDOS
-    private volatile Queue<Block> notarizedBlocks = new LinkedList<Block>();
 
     // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
     private Lock lock = new ReentrantLock();
@@ -44,6 +41,8 @@ public class Node {
 
     // Lista de Blocos e Quem já o enviou
     private volatile Map<Message, List<Integer>> msgSentTo = new HashMap<>();
+
+    private volatile Queue<Message> msgQueue = new LinkedList<>();
 
     public Node(int port) {
         this.port = port;
@@ -103,7 +102,10 @@ public class Node {
     //Cria server socket e fica a espera de conexoes
     private void startServer() throws IOException {
         this.serverSocket = new ServerSocket(port);
+        this.msgQueue = new LinkedList<>();
         System.out.println("Listening on port: " + port);
+
+        new Thread(() -> readMessages()).start();
 
         new Thread(() -> {
             try {
@@ -138,15 +140,11 @@ public class Node {
 
     // Inicia uma nova epoca
     private void startStreamlet() {
-        lock.lock();
-        try {
-            epoch++;
-        } finally {
-            lock.unlock();
-        }
+        epoch++;
+        currentLeader = Utils.getLeader(epoch, knownPorts);
 
         System.out.println();
-        System.out.println("Epoch " + epoch + " started. Current leader: " + currentLeader);
+        System.out.println("----------> Epoch " + epoch + " started. Current leader: " + currentLeader);
         System.out.println();
         
         // Se for o lider, propõe um bloco
@@ -241,6 +239,250 @@ public class Node {
         oos.reset();
     }
 
+    // Thread que vai ler as mensagens incoming por ordem
+    private void readMessages(){
+        while(true){
+            if(!msgQueue.isEmpty()){
+                Message msg;
+                lock.lock();
+                try{
+                    msg = msgQueue.poll();
+                }finally {
+                    lock.unlock();
+                }
+                
+                switch (msg.getType()) {
+                    case Propose:
+                        System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
+                        handlePropose(msg);
+                        break;
+                    case Vote:
+                        handleVote(msg);
+                        break;
+                    case Echo:
+                        handleEcho(msg);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    // Verifica se a mensagem já foi recebida e adiciona caso não tenha sido
+    // Returns true if the message was already received
+    private boolean checkReceived(Block b, int sender) {
+        if (msgReceivedBy.containsKey(b)) {
+            List<Integer> senders = msgReceivedBy.get(b);
+
+            if (senders.contains(sender)) {
+                return true;
+            } else {
+                lock.lock();
+
+                try{
+                    senders.add(sender);
+                    msgReceivedBy.put(b, senders);
+                }
+                finally {
+                    lock.unlock();
+                }
+
+                return false;
+            }
+        } else {
+            List<Integer> senders = new LinkedList<>();
+            senders.add(sender);
+
+            lock.lock();
+
+            try{
+                msgReceivedBy.put(b, senders);
+            }
+            finally {
+                lock.unlock();
+            }
+            
+            return false;
+        }
+    }
+
+    // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
+    private void handlePropose(Message msg) {
+        Block rcvdBlock;
+
+        if( msg.getContent() instanceof Block ) {
+            boolean validLength = true;
+            rcvdBlock = (Block) msg.getContent();
+
+            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+
+            // verificar se a epoca do bloco recebido é >= blocos na blockchain
+            for (BlockchainNode node : leaves) {
+                // ? Será que temos de mudar para ser APENAS MAIOR
+                if (node.getBlock().getEpoch() > rcvdBlock.getEpoch()) {
+                    validLength = false;
+                }
+            }
+
+            if (!checkReceived(rcvdBlock, msg.getSender()) && validLength && msg.getSender() != port) {
+                if (msgReceivedBy.get(rcvdBlock).size() > (knownPorts.length / 2)) {
+                    notarizeBlock(rcvdBlock);
+                }
+
+                Message vote = new Message(Type.Vote, rcvdBlock, port);
+
+                broadcast(vote);
+            }
+
+            sendEcho(msg);
+        }
+    }
+
+
+    // * Dá handle dos votos e dá echo 
+    private void handleVote(Message msg) {
+        Block votedBlock;
+
+        if (msg.getContent() instanceof Block) {
+            votedBlock = (Block) msg.getContent();
+            boolean validLength = true;
+
+            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+
+            // verificar se a epoca do bloco recebido é >= blocos na blockchain
+            for (BlockchainNode node : leaves) {
+                // ? Será que temos de mudar para ser APENAS MAIOR
+                if (node.getBlock().getEpoch() > votedBlock.getEpoch()) {
+                    validLength = false;
+                }
+            }
+
+            if (!checkReceived(votedBlock, msg.getSender()) && validLength) {
+                //Verificar quorum e notarizar
+                if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
+                    notarizeBlock(votedBlock);
+                }
+            }
+
+            sendEcho(msg);
+
+
+        }
+    }
+
+    //A collection of at more than n/2 votes from distinct nodes for the same block is called a notarization for the block
+    private void notarizeBlock(Block block) {
+        lock.lock();
+
+        try {
+            blockchain.addBlock(block);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void handleEcho(Message msg) {
+        Message rcvdEcho;
+
+        if( msg.getContent() instanceof Message ) {
+            rcvdEcho = (Message) msg.getContent();
+            
+            //Da handle da mensagem que veio em echo
+            if (rcvdEcho.getType() == Type.Propose) {
+                handlePropose(rcvdEcho);
+            }
+            else if (rcvdEcho.getType() == Type.Vote) {
+                handleVote(rcvdEcho);
+            }
+        }
+    }
+
+    private void sendEcho(Message originalMessage) {
+        Block rcvdBlock;
+        
+        if (originalMessage.getContent() instanceof Block) {
+            rcvdBlock = (Block) originalMessage.getContent();
+            
+            LinkedList<Integer> sendTo = new LinkedList<>();
+    
+            for (int port : connectedPeers.keySet()) {
+                if (!checkSent(originalMessage, port)) {
+                    sendTo.add(port);
+                }
+            }
+    
+            broadcastTo(new Message(Type.Echo, originalMessage, port), sendTo);
+        }
+    }
+
+    // Verifica se a mensagem já foi enviada e adiciona caso não tenha sido
+    private boolean checkSent(Message msg, int receiver) {
+        if (msgSentTo.containsKey(msg)) {
+            List<Integer> received = msgSentTo.get(msg);
+
+            if (received.contains(receiver)) {
+                return true;
+            } else {
+                lock.lock();
+
+                try {
+                    received.add(receiver);
+                    msgSentTo.put(msg, received);
+                } finally {
+                    lock.unlock();
+                }
+
+                return false;
+            }
+        } else {
+            List<Integer> received = new LinkedList<>();
+            received.add(receiver);
+
+            lock.lock();
+
+            try {
+                msgSentTo.put(msg, received);
+            } finally {
+                lock.unlock();
+            }
+
+            return false;
+        }
+    }
+
+    private void broadcastTo(Message msg, LinkedList<Integer> sendTo) {
+        lock.lock();
+
+        try {
+            List<Integer> disconnectedPeers = new LinkedList<Integer>();
+
+            for (int peerPort : sendTo) {
+                try {
+                    sendMessage(connectedPeers.get(peerPort), peerPort, msg);
+                } catch (IOException e) {
+                    System.out.println("------------------------------");
+                    System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
+                    System.out.println("------------------------------");
+
+                    disconnectedPeers.add(peerPort);
+                }
+            }
+    
+            // Só podemos remover depois de enviar a mensagem a todos para não dar erro
+            for (int peerPort : disconnectedPeers) {
+                connectedPeers.remove(peerPort);
+                outputStreams.remove(peerPort); 
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     // Handle das mensagens com cada peer
     private class ClientHandler implements Runnable {
         private Socket sock;
@@ -260,20 +502,11 @@ public class Node {
                     Message msg = (Message) ois.readObject();
                     // System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
                     System.out.flush();
-
-                    switch (msg.getType()) {
-                        case Propose:
-                            System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
-                            handlePropose(msg);
-                            break;
-                        case Vote:
-                            handleVote(msg);
-                            break;
-                        case Echo:
-                            handleEcho(msg);
-                            break;
-                        default:
-                            break;
+                    lock.lock();
+                    try{
+                        msgQueue.add(msg);
+                    }finally {
+                        lock.unlock();
                     }
                 }
             } catch (Exception e) {
@@ -281,226 +514,6 @@ public class Node {
                 System.out.println("-----------------------");
                 System.out.println("Client disconnected");
                 System.out.println("-----------------------");
-            }
-        }
-
-        // Verifica se a mensagem já foi recebida e adiciona caso não tenha sido
-        // Returns true if the message was already received
-        private boolean checkReceived(Block b, int sender) {
-            if (msgReceivedBy.containsKey(b)) {
-                List<Integer> senders = msgReceivedBy.get(b);
-
-                if (senders.contains(sender)) {
-                    return true;
-                } else {
-                    lock.lock();
-
-                    try{
-                        senders.add(sender);
-                        msgReceivedBy.put(b, senders);
-                    }
-                    finally {
-                        lock.unlock();
-                    }
-
-                    return false;
-                }
-            } else {
-                List<Integer> senders = new LinkedList<>();
-                senders.add(sender);
-
-                lock.lock();
-
-                try{
-                    msgReceivedBy.put(b, senders);
-                }
-                finally {
-                    lock.unlock();
-                }
-                
-                return false;
-            }
-        }
-
-        // Verifica se o bloco recebido é válido e se é maior que o maior bloco notarizado
-        private void handlePropose(Message msg) {
-            Block rcvdBlock;
-
-            if( msg.getContent() instanceof Block ) {
-                boolean validLength = true;
-                rcvdBlock = (Block) msg.getContent();
-
-                LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
-
-                // verificar se a epoca do bloco recebido é >= blocos na blockchain
-                for (BlockchainNode node : leaves) {
-                    // ? Será que temos de mudar para ser APENAS MAIOR
-                    if (node.getBlock().getEpoch() > rcvdBlock.getEpoch()) {
-                        validLength = false;
-                    }
-                }
-
-                System.out.println("Received block at epoch " + rcvdBlock.getEpoch());
-
-                if (!checkReceived(rcvdBlock, msg.getSender()) && validLength && msg.getSender() != port) {
-                    if (msgReceivedBy.get(rcvdBlock).size() > (knownPorts.length / 2)) {
-                        notarizeBlock(rcvdBlock);
-                    }
-
-                    Message vote = new Message(Type.Vote, rcvdBlock, port);
-
-                    broadcast(vote);
-                }
-
-                sendEcho(msg);
-            }
-        }
-
-
-        // * Dá handle dos votos e dá echo 
-        private void handleVote(Message msg) {
-            Block votedBlock;
-
-            if (msg.getContent() instanceof Block) {
-                votedBlock = (Block) msg.getContent();
-                boolean validLength = true;
-
-                LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
-
-                // verificar se a epoca do bloco recebido é >= blocos na blockchain
-                for (BlockchainNode node : leaves) {
-                    // ? Será que temos de mudar para ser APENAS MAIOR
-                    if (node.getBlock().getEpoch() > votedBlock.getEpoch()) {
-                        validLength = false;
-                    }
-                }
-
-                if (!checkReceived(votedBlock, msg.getSender()) && validLength) {
-                    //Verificar quorum e notarizar
-                    if (msgReceivedBy.get(votedBlock).size() > (knownPorts.length / 2)) {
-                        notarizeBlock(votedBlock);
-                    }
-                }
-
-                sendEcho(msg);
-
-
-            }
-        }
-
-        //A collection of at more than n/2 votes from distinct nodes for the same block is called a notarization for the block
-        private void notarizeBlock(Block block) {
-            lock.lock();
-
-            try {
-                if(blockchain.addBlock(block)){
-                    System.out.println();
-                    System.out.println("Block notarized at epoch " + block.getEpoch());
-                    System.out.println();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        private void handleEcho(Message msg) {
-            Message rcvdEcho;
-
-            if( msg.getContent() instanceof Message ) {
-                rcvdEcho = (Message) msg.getContent();
-                
-                //Da handle da mensagem que veio em echo
-                if (rcvdEcho.getType() == Type.Propose) {
-                    handlePropose(rcvdEcho);
-                }
-                else if (rcvdEcho.getType() == Type.Vote) {
-                    handleVote(rcvdEcho);
-                }
-            }
-        }
-
-        private void sendEcho(Message originalMessage) {
-            Block rcvdBlock;
-            
-            if (originalMessage.getContent() instanceof Block) {
-                rcvdBlock = (Block) originalMessage.getContent();
-                
-                LinkedList<Integer> sendTo = new LinkedList<>();
-        
-                for (int port : connectedPeers.keySet()) {
-                    if (!checkSent(originalMessage, port)) {
-                        sendTo.add(port);
-                    }
-                }
-        
-                broadcastTo(new Message(Type.Echo, originalMessage, port), sendTo);
-            }
-        }
-
-        // Verifica se a mensagem já foi enviada e adiciona caso não tenha sido
-        private boolean checkSent(Message msg, int receiver) {
-            if (msgSentTo.containsKey(msg)) {
-                List<Integer> received = msgSentTo.get(msg);
-
-                if (received.contains(receiver)) {
-                    return true;
-                } else {
-                    lock.lock();
-
-                    try {
-                        received.add(receiver);
-                        msgSentTo.put(msg, received);
-                    } finally {
-                        lock.unlock();
-                    }
-
-                    return false;
-                }
-            } else {
-                List<Integer> received = new LinkedList<>();
-                received.add(receiver);
-
-                lock.lock();
-
-                try {
-                    msgSentTo.put(msg, received);
-                } finally {
-                    lock.unlock();
-                }
-
-                return false;
-            }
-        }
-
-        private void broadcastTo(Message msg, LinkedList<Integer> sendTo) {
-            lock.lock();
-
-            try {
-                List<Integer> disconnectedPeers = new LinkedList<Integer>();
-    
-                for (int peerPort : sendTo) {
-                    try {
-                        sendMessage(connectedPeers.get(peerPort), peerPort, msg);
-                    } catch (IOException e) {
-                        System.out.println("------------------------------");
-                        System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                        System.out.println("------------------------------");
-    
-                        disconnectedPeers.add(peerPort);
-                    }
-                }
-        
-                // Só podemos remover depois de enviar a mensagem a todos para não dar erro
-                for (int peerPort : disconnectedPeers) {
-                    connectedPeers.remove(peerPort);
-                    outputStreams.remove(peerPort); 
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                lock.unlock();
             }
         }
     }

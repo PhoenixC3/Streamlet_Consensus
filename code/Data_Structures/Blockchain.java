@@ -30,6 +30,7 @@ public class Blockchain{
             leaves.add(new BlockchainNode(block, null));
             return true;
         }else{
+            System.out.println("Block notarized at epoch " + block.getEpoch());
             // If !empty we need to check if the block has a reference to the previous block
             // If it does, we update the leaves list by removing the previous node and adding the new one
             // and we finalize the previous blocks if necessary

@@ -9,6 +9,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,11 +27,11 @@ public class Node {
     private HashMap<Integer, ObjectOutputStream> outputStreams;
     private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
 
-    private int epoch = 0;
+    // * Volatile -> variavel que pode ser alterada por varios threads
+    private volatile int epoch = 0;
     private int epochDuration; // segundos
     private int currentLeader;
     
-    // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile Blockchain blockchain = new Blockchain();
 
     // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
@@ -140,7 +141,12 @@ public class Node {
 
     // Inicia uma nova epoca
     private void startStreamlet() {
-        epoch++;
+        lock.lock();
+        try {
+            epoch++;
+        } finally {
+            lock.unlock();
+        }
         currentLeader = Utils.getLeader(epoch, knownPorts);
 
         System.out.println();
@@ -161,15 +167,28 @@ public class Node {
         Block newBlock;
 
         // ! OVER HERE
-        // fazer uma seed para randomly todos os processos escolherem a mesma
         lock.lock();
         try{
-            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+            // COPY THE LEAVES TO AVOID REFERENCES
+            LinkedList<BlockchainNode> leaves = new LinkedList<>(blockchain.getLeaves());
             if(leaves.size() == 1){
                 previousHash = leaves.get(0).getBlock().calculateHash();
                 length = blockchain.getLength(leaves.get(0));
             }else{
-                int index = Utils.randomFromFork(epoch, leaves.size());
+                int maxLength = 0;
+                for (BlockchainNode node : leaves) {
+                    if (node.getBlock().getLength() > maxLength) {
+                        maxLength = node.getBlock().getLength();
+                    }
+                }
+                // retirar da lista de folhas os que nao tem o maximo de comprimento
+                for (int i = leaves.size() - 1; i >= 0; i--) {
+                    if (leaves.get(i).getBlock().getLength() < maxLength) {
+                        leaves.remove(i);
+                    }
+                }
+                Random rd = new Random();
+                int index = rd.nextInt(leaves.size());
                 previousHash = leaves.get(index).getBlock().calculateHash();
                 length = blockchain.getLength(leaves.get(index));
             }
@@ -241,8 +260,17 @@ public class Node {
 
     // Thread que vai ler as mensagens incoming por ordem
     private void readMessages(){
+        int confusion_start = 1;
+        int confusion_duration = 2;
+        int curr_epoch = 0;
         while(true){
-            if(!msgQueue.isEmpty()){
+            lock.lock();
+            try{
+                curr_epoch = this.epoch;
+            }finally {
+                lock.unlock();
+            }
+            if(!msgQueue.isEmpty() && ( curr_epoch < confusion_start || curr_epoch >= confusion_start + confusion_duration - 1) ){
                 Message msg;
                 lock.lock();
                 try{
@@ -317,10 +345,9 @@ public class Node {
 
             LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
 
-            // verificar se a epoca do bloco recebido é >= blocos na blockchain
+            // verificar se a epoca do bloco recebido é blocos na blockchain
             for (BlockchainNode node : leaves) {
-                // ? Será que temos de mudar para ser APENAS MAIOR
-                if (node.getBlock().getEpoch() > rcvdBlock.getEpoch()) {
+                if (node.getBlock().getEpoch() >= rcvdBlock.getEpoch()) {
                     validLength = false;
                 }
             }
@@ -353,7 +380,7 @@ public class Node {
             // verificar se a epoca do bloco recebido é >= blocos na blockchain
             for (BlockchainNode node : leaves) {
                 // ? Será que temos de mudar para ser APENAS MAIOR
-                if (node.getBlock().getEpoch() > votedBlock.getEpoch()) {
+                if (node.getBlock().getEpoch() >= votedBlock.getEpoch()) {
                     validLength = false;
                 }
             }
@@ -377,6 +404,8 @@ public class Node {
 
         try {
             blockchain.addBlock(block);
+            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+            System.out.println("Number of forks: " + leaves.size());
         } catch (Exception e) {
             e.printStackTrace();
         } finally {

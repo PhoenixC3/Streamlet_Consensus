@@ -1,12 +1,15 @@
 package Data_Structures;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.LinkedList;
 
 // This class represents a blockchain
 // It will have a list of the leaves of the blockchain
 // The leaves are the last nodes of the blockchain that may have been born from forks
-public class Blockchain{
+public class Blockchain implements Serializable{
+
+    private static final long serialVersionUID = 1L;
 
     // List of leaves
     private LinkedList<BlockchainNode> leaves;

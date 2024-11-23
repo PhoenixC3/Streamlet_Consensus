@@ -1,12 +1,15 @@
 package Data_Structures;
 
+import java.io.Serializable;
 
 // This class represents a node in the blockchain
 
 // A node has a block and a reference to the previous node
 // The previous node is null if this is the first node in the blockchain
 // With this implementation we can easily traverse the blockchain
-public class BlockchainNode {
+public class BlockchainNode implements Serializable{
+
+    private static final long serialVersionUID = 1L;
     
     // The block in this node
     private Block block;

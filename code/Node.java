@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -25,7 +26,7 @@ public class Node {
     private int port;
     private HashMap<Integer, Socket> connectedPeers;
     private HashMap<Integer, ObjectOutputStream> outputStreams;
-    private final int[] knownPorts = {8001, 8002, 8003, 8004, 8005};
+    private int[] knownPorts = null;
 
     // * Volatile -> variavel que pode ser alterada por varios threads
     private volatile int epoch = 0;
@@ -51,7 +52,20 @@ public class Node {
     }
 
     // Inicia o Peer
-    public void startNode(String time,String epochTime) {
+    public void startNode(String time, String epochTime) {
+
+        //Read server ports from file
+        try {
+            List<Integer> getPorts = readPortsFromFile("serverPorts.txt");
+            knownPorts = new int[getPorts.size()];
+
+            for (int i = 0; i < getPorts.size(); i++) {
+                knownPorts[i] = getPorts.get(i);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         connectedPeers = new HashMap<>();
         outputStreams = new HashMap<>();
 
@@ -69,6 +83,7 @@ public class Node {
 
         try {
             startServer();
+            
             Thread.sleep(10 * 1000);
 
             for (int port : knownPorts) {
@@ -85,6 +100,9 @@ public class Node {
             while (LocalDateTime.now().isBefore(startTime)) {
             }
 
+            // Sincronizar o relogio
+            synchronizeClock();
+
             // Começar protocolo
             startClock();
 
@@ -93,9 +111,62 @@ public class Node {
         }
     }
 
+    //Sincroniza o relogio para começar o protocolo no inicio de uma nova epoca
+    private void synchronizeClock() {
+        long currentTime = System.currentTimeMillis();
+        long timeSinceEpochStart = currentTime % (epochDuration * 1000);
+        long timeUntilNextEpoch = (epochDuration * 1000) - timeSinceEpochStart;
+    
+        try {
+            Thread.sleep(timeUntilNextEpoch);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //Read server addresses from file
+    private List<Integer> readPortsFromFile(String fileName) throws IOException {
+        List<Integer> ipPortPairs = new ArrayList<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+
+            while ((line = br.readLine()) != null) {
+                ipPortPairs.add(Integer.parseInt(line.trim()));
+            }
+        }
+
+        return ipPortPairs;
+    }
+
     // Inicia o relogio para começar o protocolo de x em x segundos
     private void startClock() {
         scheduler.scheduleAtFixedRate(() -> {
+            //Heartbeat nos mortos
+            for (int port : knownPorts) {
+                if (port != this.port) {
+                    if (!connectedPeers.containsKey(port)) {
+                        connectToPeer(port);
+
+                        if (connectedPeers.containsKey(port)) {
+                            try {
+                                outputStreams.get(port).writeObject(blockchain);
+                                outputStreams.get(port).flush();
+
+                                outputStreams.get(port).reset();
+
+                                outputStreams.get(port).writeObject(epoch + 1);
+                                outputStreams.get(port).flush();
+
+                                outputStreams.get(port).reset();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
+            }
+            
             startStreamlet();
         }, 0, epochDuration, TimeUnit.SECONDS);
     }
@@ -126,16 +197,22 @@ public class Node {
 
     //Liga-se ao peer na rede local com porta peerPort
     private void connectToPeer(int peerPort) {
-        try {
-            Socket socket = new Socket("127.0.0.1", peerPort);
-            connectedPeers.put(peerPort, socket);
-
-            outputStreams.put(peerPort, new ObjectOutputStream(socket.getOutputStream()));
-            outputStreams.get(peerPort).flush();
+        if (!connectedPeers.containsKey(peerPort)) {
+            try {
+                Socket socket = new Socket("127.0.0.1", peerPort);
+                connectedPeers.put(peerPort, socket);
     
-            System.out.println("Connected to 127.0.0.1:" + peerPort);
-        } catch (Exception e) {
-            System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
+                outputStreams.put(peerPort, new ObjectOutputStream(socket.getOutputStream()));
+                outputStreams.get(peerPort).flush();
+        
+                if (epoch == 0) {
+                    System.out.println("Connected to 127.0.0.1:" + peerPort);
+                }
+            } catch (Exception e) {
+                if (epoch == 0) {
+                    System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
+                }
+            }
         }
     }
 
@@ -147,6 +224,7 @@ public class Node {
         } finally {
             lock.unlock();
         }
+        
         currentLeader = Utils.getLeader(epoch, knownPorts);
 
         System.out.println();
@@ -270,6 +348,7 @@ public class Node {
             }finally {
                 lock.unlock();
             }
+
             if(!msgQueue.isEmpty() && ( curr_epoch < confusion_start || curr_epoch >= confusion_start + confusion_duration - 1) ){
                 Message msg;
                 lock.lock();
@@ -528,14 +607,29 @@ public class Node {
                 ois = new ObjectInputStream(sock.getInputStream());
 
                 while (true) {
-                    Message msg = (Message) ois.readObject();
-                    // System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
-                    System.out.flush();
-                    lock.lock();
-                    try{
-                        msgQueue.add(msg);
-                    }finally {
-                        lock.unlock();
+                    Object receivedObject = ois.readObject();
+
+                    if (receivedObject instanceof Message) {
+                        Message msg = (Message) receivedObject;
+
+                        lock.lock();
+                        try {
+                            msgQueue.add(msg);
+                        } finally {
+                            lock.unlock();
+                        }
+                    } else if (receivedObject instanceof Blockchain) {
+                        Blockchain receivedBlockchain = (Blockchain) receivedObject;
+
+                        int receivedEpoch = (int) ois.readObject();
+
+                        lock.lock();
+                        try {
+                            blockchain = receivedBlockchain;
+                            epoch = receivedEpoch;
+                        } finally {
+                            lock.unlock();
+                        }
                     }
                 }
             } catch (Exception e) {

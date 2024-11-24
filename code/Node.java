@@ -83,12 +83,26 @@ public class Node {
 
         try {
             startServer();
-            
+
             Thread.sleep(10 * 1000);
 
             for (int port : knownPorts) {
                 if (port != this.port) {
                     connectToPeer(port);
+                }
+            }
+
+            for (int port : knownPorts) {
+                if (port != this.port) {
+                    if (connectedPeers.containsKey(port)) {
+                        outputStreams.get(port).writeObject("RECOVERY");
+                        outputStreams.get(port).flush();
+                        outputStreams.get(port).reset();
+
+                        outputStreams.get(port).writeObject(this.port);
+                        outputStreams.get(port).flush();
+                        outputStreams.get(port).reset();
+                    }
                 }
             }
 
@@ -142,31 +156,6 @@ public class Node {
     // Inicia o relogio para começar o protocolo de x em x segundos
     private void startClock() {
         scheduler.scheduleAtFixedRate(() -> {
-            //Heartbeat nos mortos
-            for (int port : knownPorts) {
-                if (port != this.port) {
-                    if (!connectedPeers.containsKey(port)) {
-                        connectToPeer(port);
-
-                        if (connectedPeers.containsKey(port)) {
-                            try {
-                                outputStreams.get(port).writeObject(blockchain);
-                                outputStreams.get(port).flush();
-
-                                outputStreams.get(port).reset();
-
-                                outputStreams.get(port).writeObject(epoch + 1);
-                                outputStreams.get(port).flush();
-
-                                outputStreams.get(port).reset();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-                }
-            }
-            
             startStreamlet();
         }, 0, epochDuration, TimeUnit.SECONDS);
     }
@@ -197,22 +186,16 @@ public class Node {
 
     //Liga-se ao peer na rede local com porta peerPort
     private void connectToPeer(int peerPort) {
-        if (!connectedPeers.containsKey(peerPort)) {
-            try {
-                Socket socket = new Socket("127.0.0.1", peerPort);
-                connectedPeers.put(peerPort, socket);
+        try {
+            Socket socket = new Socket("127.0.0.1", peerPort);
+            connectedPeers.put(peerPort, socket);
+
+            outputStreams.put(peerPort, new ObjectOutputStream(socket.getOutputStream()));
+            outputStreams.get(peerPort).flush();
     
-                outputStreams.put(peerPort, new ObjectOutputStream(socket.getOutputStream()));
-                outputStreams.get(peerPort).flush();
-        
-                if (epoch == 0) {
-                    System.out.println("Connected to 127.0.0.1:" + peerPort);
-                }
-            } catch (Exception e) {
-                if (epoch == 0) {
-                    System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
-                }
-            }
+            System.out.println("Connected to 127.0.0.1:" + peerPort);
+        } catch (Exception e) {
+            System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
         }
     }
 
@@ -629,6 +612,35 @@ public class Node {
                             epoch = receivedEpoch;
                         } finally {
                             lock.unlock();
+                        }
+                    }
+                    else {
+                        String receivedString = (String) receivedObject;
+
+                        if (receivedString.equals("RECOVERY")) {
+                            int receivedPort = (int) ois.readObject();
+
+                            lock.lock();
+
+                            try {
+                                if (epoch != 0) {
+                                    if (!connectedPeers.containsKey(receivedPort)) {
+                                        connectToPeer(receivedPort);
+                                    }
+    
+                                    outputStreams.get(receivedPort).writeObject(blockchain);
+                                    outputStreams.get(receivedPort).flush();
+                                    outputStreams.get(receivedPort).reset();
+    
+                                    outputStreams.get(receivedPort).writeObject(epoch);
+                                    outputStreams.get(receivedPort).flush();
+                                    outputStreams.get(receivedPort).reset();
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            } finally {
+                                lock.unlock();
+                            }
                         }
                     }
                 }

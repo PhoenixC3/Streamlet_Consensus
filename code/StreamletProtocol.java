@@ -43,6 +43,13 @@ public class StreamletProtocol{
         System.out.println("Epoch Duration chosen: " + epoch_time + " seconds");
         System.out.println("Start Time chosen: " + time);
         System.out.println();
+
+        // Delete the blockchain file if it exists
+        File file = new File("blockchain_" + port + ".json");
+        if(file.exists()){
+            file.delete();
+        }
+        
         replica.startNode(time, epoch_time);
     }
 }   

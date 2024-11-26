@@ -33,7 +33,7 @@ public class Node {
     private int epochDuration; // segundos
     private int currentLeader;
     
-    private volatile Blockchain blockchain = new Blockchain();
+    private volatile Blockchain blockchain;
 
     // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
     private Lock lock = new ReentrantLock();
@@ -52,6 +52,7 @@ public class Node {
 
     public Node(int port) {
         this.port = port;
+        blockchain = new Blockchain(port);
         this.scheduler = Executors.newScheduledThreadPool(1);
     }
 
@@ -242,7 +243,7 @@ public class Node {
             LinkedList<BlockchainNode> leaves = new LinkedList<>(blockchain.getLeaves());
             if(leaves.size() == 1){
                 previousHash = leaves.get(0).getBlock().calculateHash();
-                length = blockchain.getLength(leaves.get(0));
+                length = leaves.get(0).getBlock().getLength() + 1;
             }else{
                 int maxLength = 0;
                 for (BlockchainNode node : leaves) {
@@ -259,7 +260,7 @@ public class Node {
                 Random rd = new Random();
                 int index = rd.nextInt(leaves.size());
                 previousHash = leaves.get(index).getBlock().calculateHash();
-                length = blockchain.getLength(leaves.get(index));
+                length = leaves.get(index).getBlock().getLength() + 1;
             }
 
             // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain

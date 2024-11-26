@@ -46,6 +46,10 @@ public class Node {
 
     private volatile Queue<Message> msgQueue = new LinkedList<>();
 
+    // * Threshold para garbage collection de mensagens, value = numero de epocas
+    private static final int GARBAGE_COLLECTION_THRESHOLD = 10;
+
+
     public Node(int port) {
         this.port = port;
         this.scheduler = Executors.newScheduledThreadPool(1);
@@ -204,6 +208,10 @@ public class Node {
         lock.lock();
         try {
             epoch++;
+            msgReceivedBy.entrySet().removeIf(entry -> entry.getKey().getEpoch() + GARBAGE_COLLECTION_THRESHOLD < epoch);
+            if ( this.epoch % GARBAGE_COLLECTION_THRESHOLD == 0 ) {
+                msgSentTo.clear();
+            }
         } finally {
             lock.unlock();
         }

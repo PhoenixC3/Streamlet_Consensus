@@ -88,7 +88,7 @@ public class Node {
         try {
             startServer();
 
-            Thread.sleep(10 * 1000);
+            Thread.sleep(5 * 1000);
 
             for (int port : knownPorts) {
                 if (port != this.port) {

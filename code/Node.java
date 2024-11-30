@@ -3,6 +3,7 @@ import java.net.Socket;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -119,7 +120,7 @@ public class Node {
             }
 
             // Sincronizar o relogio
-            synchronizeClock();
+            synchronizeClock(startTime);
 
             // Começar protocolo
             startClock();
@@ -130,15 +131,17 @@ public class Node {
     }
 
     //Sincroniza o relogio para começar o protocolo no inicio de uma nova epoca
-    private void synchronizeClock() {
+    private void synchronizeClock(LocalDateTime startTime) {
+        long epochDurationMillis = epochDuration * 1000;
         long currentTime = System.currentTimeMillis();
-        long timeSinceEpochStart = currentTime % (epochDuration * 1000);
-        long timeUntilNextEpoch = (epochDuration * 1000) - timeSinceEpochStart;
-    
-        try {
-            Thread.sleep(timeUntilNextEpoch);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        long startTimeMillis = startTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long timeSinceEpochStart = (currentTime - startTimeMillis) % epochDurationMillis;
+        long timeUntilNextEpoch = epochDurationMillis - timeSinceEpochStart;
+
+        long nextEpochStartTime = currentTime + timeUntilNextEpoch;
+
+        // Loop until the current time reaches the next epoch start time
+        while (System.currentTimeMillis() < nextEpochStartTime) {
         }
     }
 
@@ -613,8 +616,10 @@ public class Node {
 
                         lock.lock();
                         try {
-                            blockchain = receivedBlockchain;
-                            epoch = receivedEpoch;
+                            if (epoch == 0) {
+                                blockchain = receivedBlockchain;
+                                epoch = receivedEpoch;
+                            }
                         } finally {
                             lock.unlock();
                         }

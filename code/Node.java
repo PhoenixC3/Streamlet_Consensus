@@ -235,7 +235,6 @@ public class Node {
         int length;
         Block newBlock;
 
-        // ! OVER HERE
         lock.lock();
         try{
             // COPY THE LEAVES TO AVOID REFERENCES
@@ -463,8 +462,6 @@ public class Node {
             }
 
             sendEcho(msg);
-
-
         }
     }
 
@@ -636,7 +633,7 @@ public class Node {
                                         connectToPeer(receivedPort);
                                     }
     
-                                    outputStreams.get(receivedPort).writeObject(blockchain);
+                                    outputStreams.get(receivedPort).writeObject(new Blockchain(blockchain));
                                     outputStreams.get(receivedPort).flush();
                                     outputStreams.get(receivedPort).reset();
     

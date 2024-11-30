@@ -19,6 +19,32 @@ public class Blockchain implements Serializable{
         leaves = new LinkedList<BlockchainNode>();
     }
 
+    // Copy constructor
+    public Blockchain(Blockchain other) {
+        leaves = new LinkedList<BlockchainNode>();
+
+        for(BlockchainNode node : other.getLeaves()) {
+            BlockchainNode current = node;
+            LinkedList<BlockchainNode> temp = new LinkedList<BlockchainNode>();
+
+            while (current != null){
+                temp.addFirst(new BlockchainNode(current.getBlock(), null));
+
+                if (current.isFinalized()){
+                    temp.getFirst().finalizeBlock();
+                }
+
+                current = current.getPrevious();
+            }
+
+            for (int i = 1; i < temp.size(); i++) {
+                temp.get(i).setPrevious(temp.get(i-1));
+            }
+
+            leaves.add(temp.getLast());
+        }
+    }
+
     // Add a block to the blockchain
     // If the block is already in the blockchain, do nothing
     public boolean addBlock(Block block){
@@ -50,6 +76,7 @@ public class Blockchain implements Serializable{
                         leaves.remove(node);
                     }
                     leaves.add(newNode);
+
                     return true;
                 }
             }

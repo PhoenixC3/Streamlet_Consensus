@@ -24,6 +24,11 @@ public class BlockchainNode implements Serializable{
         this.previous = previous;
     }
 
+    // Set the previous node
+    public void setPrevious(BlockchainNode previous){
+        this.previous = previous;
+    }
+
     // Get the block in this node
     public Block getBlock(){
         return block;

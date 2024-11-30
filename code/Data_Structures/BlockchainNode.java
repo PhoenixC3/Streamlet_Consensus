@@ -49,4 +49,8 @@ public class BlockchainNode implements Serializable{
         return finalized;
     }
 
+    public void clearPrevious(){
+        previous = null;
+    }
+
 }

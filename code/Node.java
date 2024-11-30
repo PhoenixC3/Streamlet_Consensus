@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -33,7 +34,7 @@ public class Node {
     private int epochDuration; // segundos
     private int currentLeader;
     
-    private volatile Blockchain blockchain = new Blockchain();
+    private volatile Blockchain blockchain;
 
     // * Lock para garantir que apenas um thread acede a uma variavel de cada vez
     private Lock lock = new ReentrantLock();
@@ -52,6 +53,7 @@ public class Node {
 
     public Node(int port) {
         this.port = port;
+        blockchain = new Blockchain(port);
         this.scheduler = Executors.newScheduledThreadPool(1);
     }
 
@@ -241,7 +243,7 @@ public class Node {
             LinkedList<BlockchainNode> leaves = new LinkedList<>(blockchain.getLeaves());
             if(leaves.size() == 1){
                 previousHash = leaves.get(0).getBlock().calculateHash();
-                length = blockchain.getLength(leaves.get(0));
+                length = leaves.get(0).getBlock().getLength() + 1;
             }else{
                 int maxLength = 0;
                 for (BlockchainNode node : leaves) {
@@ -258,7 +260,7 @@ public class Node {
                 Random rd = new Random();
                 int index = rd.nextInt(leaves.size());
                 previousHash = leaves.get(index).getBlock().calculateHash();
-                length = blockchain.getLength(leaves.get(index));
+                length = leaves.get(index).getBlock().getLength() + 1;
             }
 
             // Criar um novo bloco usando o previousHash, a época atual, e o comprimento baseado na blockchain
@@ -608,8 +610,8 @@ public class Node {
                         }
                     } else if (receivedObject instanceof Blockchain) {
                         Blockchain receivedBlockchain = (Blockchain) receivedObject;
-
                         int receivedEpoch = (int) ois.readObject();
+                        int receivedPort = (int) ois.readObject();
 
                         lock.lock();
                         try {
@@ -618,26 +620,36 @@ public class Node {
                         } finally {
                             lock.unlock();
                         }
-                    }
-                    else {
-                        String receivedString = (String) receivedObject;
 
-                        if (receivedString.equals("RECOVERY")) {
-                            int receivedPort = (int) ois.readObject();
+                        String fileStatus = (String) ois.readObject();
+
+                        if (fileStatus.equals("HAVEFILE")) {
+                            File file = new File("blockchain_" + port + ".json");
 
                             lock.lock();
-
                             try {
-                                if (epoch != 0) {
-                                    if (!connectedPeers.containsKey(receivedPort)) {
-                                        connectToPeer(receivedPort);
-                                    }
-    
-                                    outputStreams.get(receivedPort).writeObject(new Blockchain(blockchain));
+                                if (!file.exists()) {
+                                    outputStreams.get(receivedPort).writeObject("SENDIT");
                                     outputStreams.get(receivedPort).flush();
                                     outputStreams.get(receivedPort).reset();
     
-                                    outputStreams.get(receivedPort).writeObject(epoch);
+                                    DataInputStream dataInputStream = new DataInputStream(ois);
+    
+                                    int bytes = 0;
+                                    FileOutputStream fileOutputStream = new FileOutputStream("blockchain_" + port + ".json");
+                            
+                                    long size = dataInputStream.readLong();
+    
+                                    byte[] buffer = new byte[4 * 1024];
+                                    while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+                                        fileOutputStream.write(buffer, 0, bytes);
+                                        size -= bytes;
+                                    }
+    
+                                    fileOutputStream.close();
+                                }   
+                                else {
+                                    outputStreams.get(receivedPort).writeObject("DONOTHING");
                                     outputStreams.get(receivedPort).flush();
                                     outputStreams.get(receivedPort).reset();
                                 }
@@ -645,6 +657,87 @@ public class Node {
                                 e.printStackTrace();
                             } finally {
                                 lock.unlock();
+                            }
+                        }
+                    }
+                    else {
+                        String receivedString = (String) receivedObject;
+
+                        if (receivedString.equals("RECOVERY")) {
+                            int receivedPort = (int) ois.readObject();
+
+                            if (epoch != 0) {
+                                if (!connectedPeers.containsKey(receivedPort)) {
+                                    connectToPeer(receivedPort);
+                                }
+
+                                LinkedList<BlockchainNode> leaves = new LinkedList<>();
+
+                                lock.lock();
+                                try {
+                                    leaves = blockchain.getLeaves();
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                } finally {
+                                    lock.unlock();
+                                }
+
+                                if (!Arrays.equals(leaves.getFirst().getBlock().getHash(), new byte[0])) {
+
+                                    lock.lock();
+                                    try {
+                                        outputStreams.get(receivedPort).writeObject(new Blockchain(port, blockchain));
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+            
+                                        outputStreams.get(receivedPort).writeObject(epoch);
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                     finally {
+                                        lock.unlock();
+                                    }
+
+                                    outputStreams.get(receivedPort).writeObject(port);
+                                    outputStreams.get(receivedPort).flush();
+                                    outputStreams.get(receivedPort).reset();
+
+                                    File file = new File("blockchain_" + port + ".json");
+
+                                    if (file.exists()) {
+                                        outputStreams.get(receivedPort).writeObject("HAVEFILE");
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+
+                                        String rec = (String) ois.readObject();
+
+                                        if (rec.equals("SENDIT")) {
+                                            FileInputStream fileInputStream = new FileInputStream(file);
+                                            DataOutputStream dataOutputStream = new DataOutputStream(outputStreams.get(receivedPort));
+
+                                            // Here we send the File
+                                            dataOutputStream.writeLong(file.length());
+                                            dataOutputStream.flush();
+
+                                            byte[] buffer = new byte[4 * 1024];
+                                            int bytes = 0;
+
+                                            while ((bytes = fileInputStream.read(buffer)) != -1) {
+                                                dataOutputStream.write(buffer, 0, bytes);
+                                                dataOutputStream.flush();
+                                            }
+
+                                            fileInputStream.close();
+                                        }
+                                    }
+                                    else {
+                                        outputStreams.get(receivedPort).writeObject("NOFILE");
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+                                    }
+                                }
                             }
                         }
                     }

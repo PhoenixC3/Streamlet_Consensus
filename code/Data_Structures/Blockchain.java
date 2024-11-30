@@ -251,9 +251,11 @@ public class Blockchain implements Serializable{
 
                 // Finalize JSON structure
                 writer.write("\n]}");
+            } catch (Exception e) {
+                System.err.println("Error writing to JSON: " + e.getMessage());
             }
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.err.println("Error appending to JSON: " + e.getMessage());
         }
     }

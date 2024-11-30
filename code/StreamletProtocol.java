@@ -1,6 +1,4 @@
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Scanner;
 
 public class StreamletProtocol{
@@ -46,7 +44,7 @@ public class StreamletProtocol{
 
         // Delete the blockchain file if it exists
         File file = new File("blockchain_" + port + ".json");
-        if(file.exists()){
+        if(file.exists()) {
             file.delete();
         }
         

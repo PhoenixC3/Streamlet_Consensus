@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -48,7 +49,6 @@ public class Node {
 
     // * Threshold para garbage collection de mensagens, value = numero de epocas
     private static final int GARBAGE_COLLECTION_THRESHOLD = 10;
-
 
     public Node(int port) {
         this.port = port;
@@ -97,18 +97,24 @@ public class Node {
                 }
             }
 
-            for (int port : knownPorts) {
-                if (port != this.port) {
-                    if (connectedPeers.containsKey(port)) {
-                        outputStreams.get(port).writeObject("RECOVERY");
-                        outputStreams.get(port).flush();
-                        outputStreams.get(port).reset();
-
-                        outputStreams.get(port).writeObject(this.port);
-                        outputStreams.get(port).flush();
-                        outputStreams.get(port).reset();
+            try {
+                if (epoch == 0) {
+                    for (int port : knownPorts) {
+                        if (port != this.port) {
+                            if (connectedPeers.containsKey(port)) {
+                                outputStreams.get(port).writeObject("RECOVERY");
+                                outputStreams.get(port).flush();
+                                outputStreams.get(port).reset();
+        
+                                outputStreams.get(port).writeObject(this.port);
+                                outputStreams.get(port).flush();
+                                outputStreams.get(port).reset();
+                            }
+                        }
                     }
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
 
             DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
@@ -119,7 +125,7 @@ public class Node {
             while (LocalDateTime.now().isBefore(startTime)) {
             }
 
-            // Sincronizar o relogio
+            // Sincronizar o relogio ate ao inicio da proxima epoca
             synchronizeClock();
 
             // Começar protocolo
@@ -413,8 +419,16 @@ public class Node {
         if( msg.getContent() instanceof Block ) {
             boolean validLength = true;
             rcvdBlock = (Block) msg.getContent();
+            LinkedList<BlockchainNode> leaves = new LinkedList<>();
 
-            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+            lock.lock();
+            try {
+                leaves = blockchain.getLeaves();
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
 
             // verificar se a epoca do bloco recebido é blocos na blockchain
             for (BlockchainNode node : leaves) {
@@ -445,8 +459,16 @@ public class Node {
         if (msg.getContent() instanceof Block) {
             votedBlock = (Block) msg.getContent();
             boolean validLength = true;
+            LinkedList<BlockchainNode> leaves = new LinkedList<>();
 
-            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
+            lock.lock();
+            try {
+                leaves = blockchain.getLeaves();
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
 
             // verificar se a epoca do bloco recebido é >= blocos na blockchain
             for (BlockchainNode node : leaves) {
@@ -464,24 +486,24 @@ public class Node {
             }
 
             sendEcho(msg);
-
-
         }
     }
 
     //A collection of at more than n/2 votes from distinct nodes for the same block is called a notarization for the block
     private void notarizeBlock(Block block) {
-        lock.lock();
+        LinkedList<BlockchainNode> leaves = new LinkedList<>();
 
+        lock.lock();
         try {
             blockchain.addBlock(block);
-            LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
-            System.out.println("Number of forks: " + leaves.size());
+            leaves = blockchain.getLeaves();
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
             lock.unlock();
         }
+
+        System.out.println("Number of forks: " + leaves.size());
     }
 
     private void handleEcho(Message msg) {
@@ -612,8 +634,8 @@ public class Node {
                         }
                     } else if (receivedObject instanceof Blockchain) {
                         Blockchain receivedBlockchain = (Blockchain) receivedObject;
-
                         int receivedEpoch = (int) ois.readObject();
+                        int receivedPort = (int) ois.readObject();
 
                         lock.lock();
                         try {
@@ -622,26 +644,36 @@ public class Node {
                         } finally {
                             lock.unlock();
                         }
-                    }
-                    else {
-                        String receivedString = (String) receivedObject;
 
-                        if (receivedString.equals("RECOVERY")) {
-                            int receivedPort = (int) ois.readObject();
+                        String fileStatus = (String) ois.readObject();
+
+                        if (fileStatus.equals("HAVEFILE")) {
+                            File file = new File("blockchain_" + port + ".json");
 
                             lock.lock();
-
                             try {
-                                if (epoch != 0) {
-                                    if (!connectedPeers.containsKey(receivedPort)) {
-                                        connectToPeer(receivedPort);
-                                    }
-    
-                                    outputStreams.get(receivedPort).writeObject(blockchain);
+                                if (!file.exists()) {
+                                    outputStreams.get(receivedPort).writeObject("SENDIT");
                                     outputStreams.get(receivedPort).flush();
                                     outputStreams.get(receivedPort).reset();
     
-                                    outputStreams.get(receivedPort).writeObject(epoch);
+                                    DataInputStream dataInputStream = new DataInputStream(ois);
+    
+                                    int bytes = 0;
+                                    FileOutputStream fileOutputStream = new FileOutputStream("blockchain_" + port + ".json");
+                            
+                                    long size = dataInputStream.readLong();
+    
+                                    byte[] buffer = new byte[4 * 1024];
+                                    while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+                                        fileOutputStream.write(buffer, 0, bytes);
+                                        size -= bytes;
+                                    }
+    
+                                    fileOutputStream.close();
+                                }   
+                                else {
+                                    outputStreams.get(receivedPort).writeObject("DONOTHING");
                                     outputStreams.get(receivedPort).flush();
                                     outputStreams.get(receivedPort).reset();
                                 }
@@ -652,12 +684,93 @@ public class Node {
                             }
                         }
                     }
+                    else {
+                        String receivedString = (String) receivedObject;
+
+                        if (receivedString.equals("RECOVERY")) {
+                            int receivedPort = (int) ois.readObject();
+
+                            if (epoch != 0) {
+                                if (!connectedPeers.containsKey(receivedPort)) {
+                                    connectToPeer(receivedPort);
+                                }
+
+                                LinkedList<BlockchainNode> leaves = new LinkedList<>();
+
+                                lock.lock();
+                                try {
+                                    leaves = blockchain.getLeaves();
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                } finally {
+                                    lock.unlock();
+                                }
+
+                                if (!Arrays.equals(leaves.getFirst().getBlock().getHash(), new byte[0])) {
+
+                                    lock.lock();
+                                    try {
+                                        outputStreams.get(receivedPort).writeObject(blockchain);
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+            
+                                        outputStreams.get(receivedPort).writeObject(epoch);
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                     finally {
+                                        lock.unlock();
+                                    }
+
+                                    outputStreams.get(receivedPort).writeObject(port);
+                                    outputStreams.get(receivedPort).flush();
+                                    outputStreams.get(receivedPort).reset();
+
+                                    File file = new File("blockchain_" + port + ".json");
+
+                                    if (file.exists()) {
+                                        outputStreams.get(receivedPort).writeObject("HAVEFILE");
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+
+                                        String rec = (String) ois.readObject();
+
+                                        if (rec.equals("SENDIT")) {
+                                            FileInputStream fileInputStream = new FileInputStream(file);
+                                            DataOutputStream dataOutputStream = new DataOutputStream(outputStreams.get(receivedPort));
+
+                                            // Here we send the File
+                                            dataOutputStream.writeLong(file.length());
+                                            dataOutputStream.flush();
+
+                                            byte[] buffer = new byte[4 * 1024];
+                                            int bytes = 0;
+
+                                            while ((bytes = fileInputStream.read(buffer)) != -1) {
+                                                dataOutputStream.write(buffer, 0, bytes);
+                                                dataOutputStream.flush();
+                                            }
+
+                                            fileInputStream.close();
+                                        }
+                                    }
+                                    else {
+                                        outputStreams.get(receivedPort).writeObject("NOFILE");
+                                        outputStreams.get(receivedPort).flush();
+                                        outputStreams.get(receivedPort).reset();
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (Exception e) {
                 // ! Se for para não dar erro, descomentar a linha de baixo
                 System.out.println("-----------------------");
                 System.out.println("Client disconnected");
-                System.out.println("-----------------------");
+                System.out.println("-----------------------"); 
             }
         }
     }

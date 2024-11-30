@@ -163,6 +163,34 @@ public class Node {
     // Inicia o relogio para começar o protocolo de x em x segundos
     private void startClock() {
         scheduler.scheduleAtFixedRate(() -> {
+            lock.lock();
+
+            try {
+                List<Integer> disconnectedPeers = new LinkedList<>();
+                for (int peerPort : connectedPeers.keySet()) {
+                    try {
+                        outputStreams.get(peerPort).writeObject("ALIVE");
+                        outputStreams.get(peerPort).flush();
+                        outputStreams.get(peerPort).reset();
+                    } catch (IOException e) {
+                        System.out.println("------------------------------");
+                        System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
+                        System.out.println("------------------------------");
+                        disconnectedPeers.add(peerPort);
+                    }
+                }
+        
+                // Só podemos remover depois de enviar a mensagem a todos para não dar erro
+                for (int peerPort : disconnectedPeers) {
+                    connectedPeers.remove(peerPort);
+                    outputStreams.remove(peerPort); 
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
+
             startStreamlet();
         }, 0, epochDuration, TimeUnit.SECONDS);
     }

@@ -68,7 +68,7 @@ public class Blockchain implements Serializable{
             leaves.add(new BlockchainNode(block, null));
             return true;
         }else{
-            System.out.println("Block notarized at epoch " + block.getEpoch());
+            System.out.println("[Blockchain] - Block notarized at epoch " + block.getEpoch());
             // If !empty we need to check if the block has a reference to the previous block
             // If it does, we update the leaves list by removing the previous node and adding the new one
             // and we finalize the previous blocks if necessary
@@ -100,6 +100,8 @@ public class Blockchain implements Serializable{
                             appendToJSON(temp);
                         }
                     }
+                    System.out.println("[Blockchain] - Blockchain Structure Updated");
+                    printChain();
                     return true;
                 }
             }
@@ -112,8 +114,9 @@ public class Blockchain implements Serializable{
             }
             BlockchainNode newNode = new BlockchainNode(block, previousNode);
             leaves.add(newNode);
+            System.out.println("[Blockchain] - Blockchain Structure Updated");
+            printChain();
             return true;
-
         }
     }
 
@@ -130,9 +133,7 @@ public class Blockchain implements Serializable{
 
             // Finalize the previous blocks
             current = current.getPrevious();
-            System.out.println("#############");
-            System.out.println("Finalized blocks up to epoch: " + current.getBlock().getEpoch());
-            System.out.println("#############");
+            System.out.println("[Blockchain] - Finalized blocks up to epoch: " + current.getBlock().getEpoch());
             while(current != null && !current.isFinalized()){
                 current.finalizeBlock();
                 current = current.getPrevious();
@@ -309,4 +310,22 @@ public class Blockchain implements Serializable{
         }
         return chain;
     }
+
+    private void printChain(){
+        for (BlockchainNode node : leaves){
+            String chain = "";
+            BlockchainNode current = node;
+            while(current != null){
+                if(current.getPrevious() == null){
+                    chain += "Epoch " + current.getBlock().getEpoch();
+                }else{
+                    chain += "Epoch " + current.getBlock().getEpoch() + " -> ";
+                }
+                current = current.getPrevious();
+            }
+            System.out.println(chain);
+        }
+
+    }
+
 }

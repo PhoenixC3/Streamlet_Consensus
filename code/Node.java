@@ -175,9 +175,7 @@ public class Node {
                         outputStreams.get(peerPort).flush();
                         outputStreams.get(peerPort).reset();
                     } catch (IOException e) {
-                        System.out.println("------------------------------");
-                        System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                        System.out.println("------------------------------");
+                        System.out.println("[Node] - Client 127.0.0.1:" + peerPort + " removed.");
                         disconnectedPeers.add(peerPort);
                     }
                 }
@@ -230,7 +228,7 @@ public class Node {
             outputStreams.put(peerPort, new ObjectOutputStream(socket.getOutputStream()));
             outputStreams.get(peerPort).flush();
     
-            System.out.println("Connected to 127.0.0.1:" + peerPort);
+            System.out.println("[Node] - Connected to 127.0.0.1:" + peerPort);
         } catch (Exception e) {
             System.out.println("Failed to connect to client 127.0.0.1:" + peerPort);
         }
@@ -252,7 +250,8 @@ public class Node {
         currentLeader = Utils.getLeader(epoch, knownPorts);
 
         System.out.println();
-        System.out.println("----------> Epoch " + epoch + " started. Current leader: " + currentLeader);
+        System.out.println("########## Epoch " + epoch + " started. ##########");
+        System.out.println("Current leader: " + currentLeader );
         System.out.println();
         
         // Se for o lider, propõe um bloco
@@ -314,9 +313,7 @@ public class Node {
         // Broadcast do novo bloco como uma mensagem de proposta
         broadcast(new Message(Type.Propose, newBlock, port));
 
-        System.out.println();
-        System.out.println("Proposed block at epoch " + epoch);
-        System.out.println();
+        System.out.println("[Node] - Proposed block at epoch " + epoch);
     }
 
     //Da broadcast para todos os peers a quem ja esta conectado
@@ -330,9 +327,7 @@ public class Node {
                 try {
                     sendMessage(connectedPeers.get(peerPort), peerPort, msg);
                 } catch (IOException e) {
-                    System.out.println("------------------------------");
-                    System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                    System.out.println("------------------------------");
+                    System.out.println("[Node] - Client 127.0.0.1:" + peerPort + " removed.");
                     disconnectedPeers.add(peerPort);
                 }
             }
@@ -383,7 +378,7 @@ public class Node {
                 
                 switch (msg.getType()) {
                     case Propose:
-                        System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
+                        // System.out.println("Received message: " + msg.getType() + " from " + msg.getSender());
                         handlePropose(msg);
                         break;
                     case Vote:
@@ -505,7 +500,7 @@ public class Node {
         try {
             blockchain.addBlock(block);
             LinkedList<BlockchainNode> leaves = blockchain.getLeaves();
-            System.out.println("Number of forks: " + leaves.size());
+            System.out.println("[Blockchain] - Number of forks: " + leaves.size());
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -592,9 +587,7 @@ public class Node {
                 try {
                     sendMessage(connectedPeers.get(peerPort), peerPort, msg);
                 } catch (IOException e) {
-                    System.out.println("------------------------------");
-                    System.out.println("Client 127.0.0.1:" + peerPort + " removed.");
-                    System.out.println("------------------------------");
+                    System.out.println("[Node] - Client 127.0.0.1:" + peerPort + " removed.");
 
                     disconnectedPeers.add(peerPort);
                 }
@@ -761,10 +754,7 @@ public class Node {
                     }
                 }
             } catch (Exception e) {
-                // ! Se for para não dar erro, descomentar a linha de baixo
-                System.out.println("-----------------------");
-                System.out.println("Client disconnected");
-                System.out.println("-----------------------");
+                System.out.println("[Node] - Client disconnected");
             }
         }
     }

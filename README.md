@@ -1,4 +1,4 @@
-# TFD24-25
+# Streamlet consensus algorithm used to implement a distributed ledger
 
 # Projeto Fase 2 Grupo 10
 
